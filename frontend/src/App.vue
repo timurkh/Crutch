@@ -11,24 +11,62 @@
 		</div>
 		<form v-on:submit.prevent="searchProducts">
 			<div class="d-flex flex-wrap">
-				<div class="justify-content-between align-items-center flex-grow-1 p-1 pb-2 my-1 mx-1">
+				<div class="justify-content-between align-items-center flex-grow-1 p-1 pb-0 my-1 mx-1">
 
-					<input v-model="searchQuery" type="text" id="search-input" placeholder="эмаль ПФ-115" class="form-control">
+					<input v-model="searchQuery.text" type="text" id="search-input" placeholder="эмаль ПФ-115" class="form-control">
 				</div>
-				<div class="ml-auto p-0 mr-1 my-1">
-					<button class="btn btn-primary m-1" :disabled="loading">Найти!</button>
+				<div class="ml-auto p-0 mr-0 my-1">
+					<button class="btn btn-primary my-1" :disabled="searchButtonDisabled">Найти!</button>
 				</div>
 			</div>
+
+			<div class="table-responsive-lg mx-1 p-0">
+				<table class="table table-sm table-borderless m-1">
+					<thead class="thead-dark text-truncate">
+						<tr class="noborder">
+							<td class="text-wrap pl-0 pt-0">
+								<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Запчасти и расходные материалы"/>
+							</td>
+							<td class="text-wrap pt-0">
+								<input id="searchCode" v-model="searchQuery.code" class="form-control m-0" style="width:100%" placeholder="ПФ-115 пф 115"/>
+							</td>
+							<td class="text-wrap pt-0">
+								<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="краска эмаль пф 115 черная"/>
+							</td>
+							<td class="text-wrap pr-0 pt-0">
+								<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="производитель : автохимия"/>
+							</td>
+						</tr>
+						<tr class="">
+							<th class="text-wrap">Категория</th>
+							<th class="text-wrap">Артикул</th>
+							<th class="text-wrap">Название</th>
+							<th class="text-wrap">Свойства</th>
+						</tr>
+					</thead>
+					<tbody v-if="!loading">
+						<tr class="" v-for="(product, index) in searchResults" :key="index">
+
+							<td class="text-wrap">
+							</td>
+							<td class="text-wrap">
+							</td>
+							<td class="text-truncate">{{product}}</td>
+							<td class="text-truncate"></td>
+
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
 		</form>
 
-    <div v-if="loading">
-      <div class="mt-1" align="center">
-        <div class="spinner-border mt-1" role="status">
-          <span class="sr-only">Loading...</span>
-        </div>
-      </div>
-    </div>
-		<div v-else>
+		<div v-if="loading">
+			<div class="mt-1" align="center">
+				<div class="spinner-border mt-1" role="status">
+					<span class="sr-only">Loading...</span>
+				</div>
+			</div>
 		</div>
   </div>
 </template>
@@ -42,15 +80,29 @@ export default {
   data() { return {
     loading:false,
     error_message:"",
-    searchQuery: '',
+    searchQuery: {},
+		searchResults:[],
   } },
-
+  computed: {
+		searchButtonDisabled() {
+			return this.loading || !(
+					this.searchQuery.text != null && this.searchQuery.text.length > 2 || 
+					this.searchQuery.category != null && this.searchQuery.category.length > 2 || 
+					this.searchQuery.code != null && this.searchQuery.code.length > 2 || 
+					this.searchQuery.property != null && this.searchQuery.property.length > 2 || 
+					this.searchQuery.name != null && this.searchQuery.name.length > 2  
+			) ;
+		},
+  },
   methods: {
     searchProducts() {
       this.loading = true;
-      axios.post("/api/searchProducts", {
-        searchQuery: this.searchQuery
-      })      
+			console.log(this.searchQuery);
+      axios({
+				method: "post", 
+				url: "/api/searchProducts",
+				data: this.searchQuery
+			})      
       .then(res => {
         this.searchResults = res.data;
         this.loading = false;
