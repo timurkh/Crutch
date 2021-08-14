@@ -5,15 +5,19 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/elastic/go-elasticsearch/v5"
 )
+
+const itemsPerPage = 5
 
 type SearchHelper struct {
 	es *elasticsearch.Client
 }
 
 type SearchQuery struct {
+	Page     int    `json:"page"`
 	Text     string `json:"text"`
 	Category string `json:"category"`
 	Code     string `json:"code"`
@@ -25,7 +29,7 @@ func initSearchHelper() *SearchHelper {
 
 	cfg := elasticsearch.Config{
 		Addresses: []string{
-			"http://10.130.0.21:9200",
+			"http://10.130.0.21:9400",
 		},
 	}
 
@@ -49,22 +53,45 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 
 	log.Printf("## Handling search request text=%s, category=%s, code=%s, name=%s, property=%s\n", searchQuery.Text, searchQuery.Category, searchQuery.Code, searchQuery.Name, searchQuery.Property)
 
+	mustRequirements := make([]interface{}, 0)
+
+	if len(searchQuery.Text) > 2 {
+		mustRequirements = append(mustRequirements, map[string]interface{}{
+			"simple_query_string": map[string]interface{}{
+				"query":            searchQuery.Text,
+				"default_operator": "AND",
+				"analyzer":         "russian",
+				"fields": []interface{}{
+					"code^8",
+					"description^2",
+					"properties^2",
+					"name^4",
+					"category",
+				},
+			},
+		})
+	}
+
+	if len(searchQuery.Category) > 2 {
+		mustRequirements = append(mustRequirements, map[string]interface{}{
+			"term": map[string]interface{}{
+				"category.name": searchQuery.Category,
+			},
+		},
+		)
+	}
+
 	var buf bytes.Buffer
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
-			"simple_query_string": map[string]interface{}{
-				"query":    searchQuery.Text,
-				"analyzer": "simple",
-				"fields": []interface{}{
-					"code^6",
-					"description",
-					"properties^2",
-					"supplier_code^8",
-					"name^4",
-				},
+			"bool": map[string]interface{}{
+				"must": mustRequirements,
 			},
 		},
+		"size": strconv.Itoa(itemsPerPage),
+		"from": strconv.Itoa(searchQuery.Page * itemsPerPage),
 	}
+
 	if err := json.NewEncoder(&buf).Encode(query); err != nil {
 		log.Fatalf("Error encoding query: %s", err)
 	}
@@ -98,11 +125,17 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
 		log.Fatalf("Error parsing the response body: %s", err)
 	}
+
+	total := int(response["hits"].(map[string]interface{})["total"].(float64))
+	totalPages := total / itemsPerPage
+	if totalPages*itemsPerPage < total {
+		totalPages++
+	}
 	// Print the response status, number of results, and request duration.
 	log.Printf(
 		"[%s] %d hits; took: %dms",
 		res.Status(),
-		int(response["hits"].(map[string]interface{})["total"].(float64)),
+		total,
 		int(response["took"].(float64)),
 	)
 
@@ -111,7 +144,12 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	err = json.NewEncoder(w).Encode(entries)
+	err = json.NewEncoder(w).Encode(struct {
+		Page       int         `json:"page"`
+		TotalPages int         `json:"totalPages"`
+		Results    interface{} `json:"results"`
+	}{searchQuery.Page, totalPages, entries})
+
 	if err != nil {
 		log.Println(err.Error())
 	}
@@ -119,12 +157,12 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 
 func (sh *SearchHelper) getResponseEntries(response map[string]interface{}) []map[string]string {
 
-	hits := response["hits"].(map[string]interface{})["hits"]
+	hits := response["hits"].(map[string]interface{})["hits"].([]interface{})
 
 	entries := make([]map[string]string, len(hits))
 
 	// iterate through hits
-	for i, hit := range hits.([]interface{}) {
+	for i, hit := range hits {
 		h := hit.(map[string]interface{})
 		s := h["_source"].(map[string]interface{})
 		var categories string
@@ -154,6 +192,7 @@ func (sh *SearchHelper) getResponseEntries(response map[string]interface{}) []ma
 		}
 
 		entry := map[string]string{
+			"id":         h["_id"].(string),
 			"categories": categories,
 			"code":       s["code"].(string),
 			"name":       s["name"].(string),
@@ -161,9 +200,6 @@ func (sh *SearchHelper) getResponseEntries(response map[string]interface{}) []ma
 		}
 
 		entries[i] = entry
-
-		log.Printf("\n%d: ID=%s, Category=%s, Code=%s, Name=%s, Properties=%s\n", i, h["_id"], categories, s["code"], s["name"], properties)
-
 	}
 
 	return entries

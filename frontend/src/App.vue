@@ -47,12 +47,10 @@
 					<tbody v-if="!loading">
 						<tr class="" v-for="(product, index) in searchResults" :key="index">
 
-							<td class="text-wrap">
-							</td>
-							<td class="text-wrap">
-							</td>
-							<td class="text-truncate">{{product}}</td>
-							<td class="text-truncate"></td>
+							<td class="text-wrap"> {{product.categories}}</td>
+							<td class="text-wrap"> {{product.code}} </td>
+							<td class="text-wrap"> <a :href="'/catalog/product/'+product.id">{{product.name}}</a> </td>
+							<td class="text-wrap"> {{product.properties}} </td>
 
 						</tr>
 					</tbody>
@@ -68,6 +66,13 @@
 				</div>
 			</div>
 		</div>
+		<div v-else>
+			<div v-if="totalPages > 1" align="center">
+				<span class="m-2" v-for="i in Math.min(page, 2)" :key="i"> <a href="#" @click.prevent="setPage(Math.max(page - 2, 0))"> {{ Math.max(page - 2, 0) + i }} </a> </span>
+				<span class="m-2"> {{page + 1}}</span>
+				<span class="m-2" v-for="i in Math.min(totalPages - page, 2)" :key="i"> <a href="#" @click.prevent="setPage(page + i)"> {{ page + i + 1 }} </a> </span>
+			</div>
+		</div>
   </div>
 </template>
 
@@ -81,7 +86,9 @@ export default {
     loading:false,
     error_message:"",
     searchQuery: {},
+		currentSearchQuery: {},
 		searchResults:[],
+		total:0,
   } },
   computed: {
 		searchButtonDisabled() {
@@ -104,14 +111,43 @@ export default {
 				data: this.searchQuery
 			})      
       .then(res => {
-        this.searchResults = res.data;
+				this.error_message = "";
+        this.searchResults = res.data.results;
+        this.page = res.data.page;
+        this.totalPages = res.data.totalPages;
+
+				this.currentSearchQuery = Object.assign({}, this.searchQuery); 
         this.loading = false;
       })
       .catch(error => {
         this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error);
+				this.searchResults = {};
         this.loading = false;
       })
     },
+		setPage(page) {
+      this.loading = true;
+			this.currentSearchQuery.page = page;
+			console.log(this.currentSearchQuery);
+      axios({
+				method: "post", 
+				url: "/api/searchProducts",
+				data: this.currentSearchQuery
+			})      
+      .then(res => {
+				this.error_message = "";
+        this.searchResults = res.data.results;
+        this.page = res.data.page;
+        this.totalPages = res.data.totalPages;
+
+        this.loading = false;
+      })
+      .catch(error => {
+        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error);
+				this.searchResults = {};
+        this.loading = false;
+      })
+		},
     getAxiosErrorMessage : function(error) {
       if (error.response != null && error.response.data != null && error.response.data != "") {
         return error.response.data;

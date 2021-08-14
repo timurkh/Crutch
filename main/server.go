@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 )
@@ -16,7 +15,7 @@ func main() {
 	http.Handle("/", fs)
 	http.HandleFunc("/api/searchProducts", sh.searchProductsHandler)
 
-	fmt.Println("Server listening on port 3000")
+	log.Println("Server listening on port 3000")
 	log.Panic(
 		http.ListenAndServe(":3000", nil),
 	)
