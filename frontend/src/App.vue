@@ -34,7 +34,7 @@
 								<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="краска эмаль пф 115 черная"/>
 							</td>
 							<td class="text-wrap pr-0 pt-0">
-								<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="производитель : автохимия"/>
+								<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="автохимия"/>
 							</td>
 						</tr>
 						<tr class="">
@@ -75,6 +75,21 @@
 		</div>
   </div>
 </template>
+
+<style>
+.form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+            color: #AAAAAA;
+            opacity: 1; /* Firefox */
+}
+
+.form-control:-ms-input-placeholder { /* Internet Explorer 10-11 */
+            color: #AAAAAA;
+}
+
+.form-control::-ms-input-placeholder { /* Microsoft Edge */
+            color: #AAAAAA;
+ }
+</style>
 
 <script>
 import axios from 'axios';
