@@ -1,0 +1,17 @@
+[Unit]
+Description=industrial.market crutch
+
+[Service]
+User=nobody
+WorkingDirectory=/home/severstal/s/search
+ExecStart=/home/severstal/s/search/search
+Type=simple
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=crutch
+
+[Install]
+WantedBy=multi-user.target

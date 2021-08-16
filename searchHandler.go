@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -43,12 +44,11 @@ func initSearchHelper() *SearchHelper {
 	return &sh
 }
 
-func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Request) {
+func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Request) error {
 	var searchQuery SearchQuery
 	err := json.NewDecoder(r.Body).Decode(&searchQuery)
 	if err != nil {
-		log.Println(err)
-		return
+		return err
 	}
 
 	log.Printf("## Handling search request text=%s, category=%s, code=%s, name=%s, property=%s\n", searchQuery.Text, searchQuery.Category, searchQuery.Code, searchQuery.Name, searchQuery.Property)
@@ -74,8 +74,35 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 
 	if len(searchQuery.Category) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"term": map[string]interface{}{
-				"category.name": searchQuery.Category,
+			"wildcard": map[string]interface{}{
+				"category.name": searchQuery.Category + "*",
+			},
+		},
+		)
+	}
+
+	if len(searchQuery.Code) > 2 {
+		mustRequirements = append(mustRequirements, map[string]interface{}{
+			"match": map[string]interface{}{
+				"code": "*" + searchQuery.Code + "*",
+			},
+		},
+		)
+	}
+
+	if len(searchQuery.Name) > 2 {
+		mustRequirements = append(mustRequirements, map[string]interface{}{
+			"wildcard": map[string]interface{}{
+				"name": searchQuery.Name + "*",
+			},
+		},
+		)
+	}
+
+	if len(searchQuery.Property) > 2 {
+		mustRequirements = append(mustRequirements, map[string]interface{}{
+			"match": map[string]interface{}{
+				"properties.value": searchQuery.Property,
 			},
 		},
 		)
@@ -103,7 +130,9 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 		sh.es.Search.WithBody(&buf),
 	)
 	if err != nil {
-		log.Fatalf("Error getting response: %s", err)
+		err = fmt.Errorf("Error getting response: %w", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	if res.IsError() {
@@ -123,7 +152,9 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	var response map[string]interface{}
 
 	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-		log.Fatalf("Error parsing the response body: %s", err)
+		err = fmt.Errorf("Error parsing elastic response: %w", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
 	}
 
 	total := int(response["hits"].(map[string]interface{})["total"].(float64))
@@ -151,8 +182,13 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	}{searchQuery.Page, totalPages, entries})
 
 	if err != nil {
-		log.Println(err.Error())
+		err = fmt.Errorf("Error while preparing json reponse: %w", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
 	}
+
+	return nil
+
 }
 
 func (sh *SearchHelper) getResponseEntries(response map[string]interface{}) []map[string]string {

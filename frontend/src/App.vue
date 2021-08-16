@@ -70,7 +70,7 @@
 			<div v-if="totalPages > 1" align="center">
 				<span class="m-2" v-for="i in Math.min(page, 2)" :key="i"> <a href="#" @click.prevent="setPage(Math.max(page - 2, 0))"> {{ Math.max(page - 2, 0) + i }} </a> </span>
 				<span class="m-2"> {{page + 1}}</span>
-				<span class="m-2" v-for="i in Math.min(totalPages - page, 2)" :key="i"> <a href="#" @click.prevent="setPage(page + i)"> {{ page + i + 1 }} </a> </span>
+				<span class="m-2" v-for="i in Math.min(totalPages - page - 1, 2)" :key="i"> <a href="#" @click.prevent="setPage(page + i)"> {{ page + i + 1 }} </a> </span>
 			</div>
 		</div>
   </div>
@@ -93,6 +93,7 @@
 
 <script>
 import axios from 'axios';
+axios.defaults.baseURL = '/crutch';
 
 export default {
   name: 'App',
