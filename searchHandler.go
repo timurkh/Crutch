@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/elastic/go-elasticsearch/v5"
@@ -44,7 +45,19 @@ func initSearchHelper() *SearchHelper {
 	return &sh
 }
 
+func stripSpecialSymbols(s string) string {
+	//return strings.Replace(strings.Replace(strings.Replace(strings.Replace(s, "\\", "", -1), "/", "", -1), "(", "", -1), ")", "", -1)
+	re := regexp.MustCompile(`[:;\.\\/()]`)
+	return re.ReplaceAllString(s, " ")
+}
+
 func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Request) error {
+
+	if err := checkAuth(r); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return err
+	}
+
 	var searchQuery SearchQuery
 	err := json.NewDecoder(r.Body).Decode(&searchQuery)
 	if err != nil {
@@ -58,7 +71,7 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	if len(searchQuery.Text) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
 			"simple_query_string": map[string]interface{}{
-				"query":            searchQuery.Text,
+				"query":            stripSpecialSymbols(searchQuery.Text),
 				"default_operator": "AND",
 				"analyzer":         "russian",
 				"fields": []interface{}{
@@ -122,6 +135,8 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	if err := json.NewEncoder(&buf).Encode(query); err != nil {
 		log.Fatalf("Error encoding query: %s", err)
 	}
+
+	log.Println("Quering elastic: ", buf.String())
 
 	res, err := sh.es.Search(
 		sh.es.Search.WithContext(r.Context()),

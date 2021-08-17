@@ -1,4 +1,4 @@
-module industrial.market/search
+module industrial.market/crutch
 
 go 1.16
 

@@ -3,8 +3,12 @@ Description=industrial.market crutch
 
 [Service]
 User=nobody
-WorkingDirectory=/home/severstal/s/search
-ExecStart=/home/severstal/s/search/search
+WorkingDirectory=/home/severstal/s/crutch/release
+ExecStart=/home/severstal/s/crutch/release/crutch
+Environment=PORT=3000
+Environment=BASEURL=crutch
+Environment=DB_USER=crutch_ro
+Environment=DB_PASSWORD=d3fcsc33c
 Type=simple
 TimeoutStopSec=10
 Restart=on-failure
