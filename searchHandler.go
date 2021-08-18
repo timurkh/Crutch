@@ -12,7 +12,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v5"
 )
 
-const itemsPerPage = 5
+const itemsPerPage = 20
 
 type SearchHelper struct {
 	es *elasticsearch.Client
@@ -27,11 +27,11 @@ type SearchQuery struct {
 	Property string `json:"property"`
 }
 
-func initSearchHelper() *SearchHelper {
+func initSearchHelper(addr string) *SearchHelper {
 
 	cfg := elasticsearch.Config{
 		Addresses: []string{
-			"http://10.130.0.21:9400",
+			addr,
 		},
 	}
 
@@ -177,6 +177,7 @@ func (sh *SearchHelper) searchProductsHandler(w http.ResponseWriter, r *http.Req
 	if totalPages*itemsPerPage < total {
 		totalPages++
 	}
+	log.Printf("Total %s hits, %s pages, %s items per page\n", total, totalPages, itemsPerPage)
 	// Print the response status, number of results, and request duration.
 	log.Printf(
 		"[%s] %d hits; took: %dms",

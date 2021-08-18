@@ -18,7 +18,7 @@
 			</div>
 
 			<div class="table-responsive-lg m-1 mt-0 p-0 pr-1">
-				<table class="table table-sm table-borderless m-1">
+				<table class="table table-sm table-borderless m-1" ref="productsTable">
 					<thead class="thead-dark text-truncate">
 						<tr class="noborder">
 							<td class="text-wrap pl-0 pt-0">
@@ -41,13 +41,13 @@
 							<th class="text-wrap pr-1">Свойства</th>
 						</tr>
 					</thead>
-					<tbody v-if="!loading">
+					<tbody > 
 						<tr class="" v-for="(product, index) in searchResults" :key="index">
 
-							<td class="text-wrap"> {{product.categories}}</td>
-							<td class="text-wrap"> {{product.code}} </td>
-							<td class="text-wrap"> <a :href="'/catalog/product/'+product.id">{{product.name}}</a> </td>
-							<td class="text-wrap"> {{product.properties}} </td>
+							<td class="text-wrap text-left"> {{product.categories}}</td>
+							<td class="text-wrap text-left"> {{product.code}} </td>
+							<td class="text-wrap text-left"> <a :href="'/catalog/product/'+product.id">{{product.name}}</a> </td>
+							<td class="text-wrap text-left"> {{product.properties}} </td>
 
 						</tr>
 					</tbody>
@@ -63,18 +63,10 @@
 				</div>
 			</div>
 		</div>
-		<div v-else>
-			<div v-if="totalPages > 1" align="center">
-				<span class="m-2" v-for="i in Math.min(page, 2)" :key="i"> <a href="#" @click.prevent="setPage(Math.max(page - 2, 0))"> {{ Math.max(page - 2, 0) + i }} </a> </span>
-				<span class="m-2"> {{page + 1}}</span>
-				<span class="m-2" v-for="i in Math.min(totalPages - page - 1, 2)" :key="i"> <a href="#" @click.prevent="setPage(page + i)"> {{ page + i + 1 }} </a> </span>
-				<span class="m-2"> [Всего {{totalPages}} страниц{{totalPages > 4?'':'ы'}}]</span>
-			</div>
-		</div>
   </div>
 </template>
 
-<style>
+.<style>
 .form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
             color: #AAAAAA;
             opacity: 1; /* Firefox */
@@ -90,86 +82,112 @@
 </style>
 
 <script>
-import axios from 'axios';
-axios.defaults.baseURL = '/' + process.env.VUE_APP_BASE_URL;
+import axios from 'axios'
+axios.defaults.baseURL = '/' + process.env.VUE_APP_BASE_URL
+
+function doubleRaf (callback) {
+	requestAnimationFrame(() => {
+		requestAnimationFrame(callback)
+	})
+}
 
 export default {
-  name: 'App',
+	name: 'App',
 
-  data() { return {
-    loading:false,
-    error_message:"",
-    searchQuery: {},
+	setup() {
+	},
+	data() { return {
+		loading:false,
+		error_message:"",
+		searchQuery: {},
 		currentSearchQuery: {},
 		searchResults:[],
+		page:0,
 		totalPages:0,
-  } },
-  computed: {
+	} },
+	computed: {
 		searchButtonDisabled() {
 			return this.loading || !(
-					this.searchQuery.text != null && this.searchQuery.text.length > 2 || 
-					this.searchQuery.category != null && this.searchQuery.category.length > 2 || 
-					this.searchQuery.code != null && this.searchQuery.code.length > 2 || 
-					this.searchQuery.property != null && this.searchQuery.property.length > 2 || 
-					this.searchQuery.name != null && this.searchQuery.name.length > 2  
-			) ;
+				this.searchQuery.text != null && this.searchQuery.text.length > 2 || 
+				this.searchQuery.category != null && this.searchQuery.category.length > 2 || 
+				this.searchQuery.code != null && this.searchQuery.code.length > 2 || 
+				this.searchQuery.property != null && this.searchQuery.property.length > 2 || 
+				this.searchQuery.name != null && this.searchQuery.name.length > 2  
+			) 
 		},
-  },
+	},
   methods: {
     searchProducts() {
-      this.loading = true;
-			console.log(this.searchQuery);
+      this.loading = true
       axios({
 				method: "post", 
 				url: "/api/searchProducts",
 				data: this.searchQuery
 			})      
       .then(res => {
-				this.error_message = "";
-        this.searchResults = res.data.results;
-        this.page = res.data.page;
-        this.totalPages = res.data.totalPages;
+				this.error_message = ""
+        this.searchResults = res.data.results
+        this.page = res.data.page
+        this.totalPages = res.data.totalPages
 
-				this.currentSearchQuery = Object.assign({}, this.searchQuery); 
-        this.loading = false;
+				this.currentSearchQuery = Object.assign({}, this.searchQuery)
+        this.loading = false
+
+				this.$nextTick(doubleRaf(() => this.onScroll()))
       })
       .catch(error => {
-        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error);
-				this.searchResults = {};
-        this.loading = false;
+        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error)
+				this.searchResults = []
+        this.loading = false
       })
     },
-		setPage(page) {
-      this.loading = true;
-			this.currentSearchQuery.page = page;
-			console.log(this.currentSearchQuery);
+		loadMoreProducts() {
+      this.loading = true
+			this.currentSearchQuery.page = this.page+1
       axios({
 				method: "post", 
 				url: "/api/searchProducts",
 				data: this.currentSearchQuery
 			})      
       .then(res => {
-				this.error_message = "";
-        this.searchResults = res.data.results;
-        this.page = res.data.page;
-        this.totalPages = res.data.totalPages;
+				this.error_message = ""
+        this.searchResults = this.searchResults.concat(res.data.results)
+        this.page = res.data.page
+        this.totalPages = res.data.totalPages
 
-        this.loading = false;
+        this.loading = false
+				this.$nextTick(doubleRaf(() => this.onScroll()))
       })
       .catch(error => {
-        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error);
-				this.searchResults = {};
-        this.loading = false;
+        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error)
+				this.searchResults = []
+        this.loading = false
       })
 		},
     getAxiosErrorMessage : function(error) {
       if (error.response != null && error.response.data != null && error.response.data != "") {
-        return error.response.data;
+        return error.response.data
 
       } else {
-        return error;
+        return error
       }
     },
-  }
+		onScroll : function () {
+			if (!this.loading && this.page +1 < this.totalPages) {
+				let element = this.$refs.productsTable
+				if ( element.getBoundingClientRect().bottom < window.innerHeight ) {
+					this.loadMoreProducts()
+				}
+			}
+		}
+  },
+	mounted() {
+		this.$nextTick(function() {
+			window.addEventListener('scroll', this.onScroll)
+		})
+	},
+	beforeUnmount() {
+		window.removeEventListener('scroll', this.onScroll)
+	}  
 }
 </script>

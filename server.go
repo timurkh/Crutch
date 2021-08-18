@@ -31,7 +31,8 @@ func main() {
 
 	port := getEnv("PORT", "3001")
 	baseUrl := getEnv("BASEURL", "crutchdev")
-	sh := initSearchHelper()
+	elastic := getEnv("ELASTIC", "http://10.130.0.21:9400")
+	sh := initSearchHelper(elastic)
 
 	router := mux.NewRouter().StrictSlash(true)
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
