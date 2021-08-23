@@ -1,83 +1,92 @@
 <template>
-	<div id="app" class="container-fluid p-4">
-
-    <div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
-      {{ error_message }}
-    </div>
+	<div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
+		{{ error_message }}
+	</div>
 
 
-		<form v-on:submit.prevent="searchProducts">
-			<div class="d-flex flex-wrap">
-				<div class="justify-content-between align-items-center flex-grow-1 p-1 pb-0 m-1">
-
-					<input v-model="searchQuery.text" type="text" id="search-input" placeholder="эмаль ПФ-115" class="form-control">
-				</div>
-				<div class="ml-auto p-1 mb-0">
-					<button class="btn btn-info my-1" :disabled="searchButtonDisabled">Найти!</button>
-				</div>
+	<form v-on:submit.prevent="onSearchSubmit" class="form-horizontal">
+		<div class="d-flex flex-wrap">
+			<div class="form-inline p-1 pb-0 pr-0 m-1 mr-0">
+				<select id="city" class="form-control w-auto" v-model="searchQuery.cityId">
+					<option value="0">Город</option>
+					<option v-for="city in user.cities" :value="city.id" :key="city.id">{{ city.name }} </option>
+				</select>
 			</div>
-
-			<div class="table-responsive-lg m-1 mt-0 p-0 pr-1">
-				<table class="table table-sm table-borderless m-1" ref="productsTable">
-					<thead class="thead-dark text-truncate">
-						<tr class="noborder">
-							<td class="text-wrap pl-0 pt-0">
-								<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Запчасти и расходные материалы"/>
-							</td>
-							<td class="text-wrap pt-0">
-								<input id="searchCode" v-model="searchQuery.code" class="form-control m-0" style="width:100%" placeholder="ПФ-115 пф 115"/>
-							</td>
-							<td class="text-wrap pt-0">
-								<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="краска эмаль пф 115 черная"/>
-							</td>
-							<td class="text-wrap pr-0 pt-0">
-								<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="автохимия"/>
-							</td>
-						</tr>
-						<tr class="">
-							<th class="text-wrap">Категория</th>
-							<th class="text-wrap">Артикул</th>
-							<th class="text-wrap">Название</th>
-							<th class="text-wrap pr-1">Свойства</th>
-						</tr>
-					</thead>
-					<tbody > 
-						<tr class="" v-for="(product, index) in searchResults" :key="index">
-
-							<td class="text-wrap text-left"> {{product.categories}}</td>
-							<td class="text-wrap text-left"> {{product.code}} </td>
-							<td class="text-wrap text-left"> <a :href="'/catalog/product/'+product.id">{{product.name}}</a> </td>
-							<td class="text-wrap text-left"> {{product.properties}} </td>
-
-						</tr>
-					</tbody>
-				</table>
+			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+				<input v-model="searchQuery.text" type="text" id="search-input" placeholder="Продукт" class="form-control flex-fill">
 			</div>
-
-		</form>
-
-		<div v-if="loading">
-			<div class="mt-1" align="center">
-				<div class="spinner-border mt-1" role="status">
-					<span class="sr-only">Loading...</span>
-				</div>
+			<div class="ml-auto p-1 mb-0">
+				<button class="btn btn-info my-1" :disabled="searchButtonDisabled">Найти!</button>
 			</div>
 		</div>
-  </div>
+		
+		<div class="d-flex flex-wrap">
+			<div class="form-inline p-1 pb-0 pr-0 m-1 mr-0">
+				<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Категория"/>
+			</div>
+			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+				<input id="searchCode" v-model="searchQuery.code" class="form-control m-0" style="width:100%" placeholder="Артикул"/>
+			</div>
+			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+				<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="Название"/>
+			</div>
+			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+				<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="Свойства"/>
+			</div>
+		</div>
+	</form>
+
+
+	<div class="table-responsive-lg m-1 mt-0 p-0 pr-1">
+		<table class="table table-sm table-striped table-borderless m-1" ref="productsTable">
+			<thead class="thead-dark text-truncate">
+				<tr class="d-flex">
+					<th class="text-wrap col-2">Категория</th>
+					<th class="text-wrap col-2">Артикул</th>
+					<th class="text-wrap col-2">Название</th>
+					<th class="text-wrap col-2">Описание</th>
+					<th class="text-wrap col-1">Остаток</th>
+					<th class="text-wrap col-1">Цена</th>
+					<th class="text-wrap col-2 pr-1">Поставщик</th>
+				</tr>
+			</thead>
+			<tbody > 
+				<tr class="d-flex" v-for="(product, index) in searchResults" :key="index">
+
+					<td class="text-wrap col-2 "> {{product.category}}</td>
+					<td class="text-wrap col-2 "> {{product.code}} </td>
+					<td class="text-wrap col-2 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
+					<td class="text-wrap col-2 " data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
+					<td class="text-wrap col-1 "> {{product.rest}} </td>
+					<td class="text-wrap col-1 "> {{product.price}} </td>
+					<td class="text-wrap col-2 "> {{product.supplier}} </td>
+
+				</tr>
+			</tbody>
+		</table>
+	</div>
+
+	<div v-if="loading">
+		<div class="mt-1" align="center">
+			<div class="spinner-border mt-1" role="status">
+				<span class="sr-only">Loading...</span>
+			</div>
+		</div>
+	</div>
 </template>
 
 .<style>
 .form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
-            color: #AAAAAA;
+            color: #888888;
             opacity: 1; /* Firefox */
 }
 
 .form-control:-ms-input-placeholder { /* Internet Explorer 10-11 */
-            color: #AAAAAA;
+            color: #888888;
 }
 
 .form-control::-ms-input-placeholder { /* Microsoft Edge */
-            color: #AAAAAA;
+            color: #888888;
  }
 </style>
 
@@ -93,13 +102,11 @@ function doubleRaf (callback) {
 
 export default {
 	name: 'App',
-
-	setup() {
-	},
+	props: ["user"],
 	data() { return {
 		loading:false,
 		error_message:"",
-		searchQuery: {},
+		searchQuery: {cityId:0},
 		currentSearchQuery: {},
 		searchResults:[],
 		page:0,
@@ -116,8 +123,38 @@ export default {
 			) 
 		},
 	},
+	created() {
+		window.addEventListener('popstate', e => {
+				this.searchQuery = e.state;
+				this.searchProducts();
+		});
+	},
+	mounted() {
+
+		this.$nextTick(function() {
+			window.addEventListener('scroll', this.onScroll)
+		})
+	},
+	watch : {
+		user : function(newVal){
+			if(newVal.cities == null || newVal.cities.length == 0) {
+				this.error_message = "У вашего аккаунта не задано ни одного склада на который можно доставить груз"
+			}
+		}
+	},
+	beforeUnmount() {
+		window.removeEventListener('scroll', this.onScroll)
+	},  
   methods: {
+		stripHTML: function (value) {
+			return value.replace(/<\/?[^>]+>/ig, " ");
+		},
+		onSearchSubmit() {
+			history.pushState( Object.assign({}, this.searchQuery), this.searchQuery.text, "/" + process.env.VUE_APP_BASE_URL + "/search?" + this.searchQuery.text)  
+			this.searchProducts()
+		},
     searchProducts() {
+			this.searchResults = []
       this.loading = true
       axios({
 				method: "post", 
@@ -175,19 +212,18 @@ export default {
 		onScroll : function () {
 			if (!this.loading && this.page +1 < this.totalPages) {
 				let element = this.$refs.productsTable
-				if ( element.getBoundingClientRect().bottom < window.innerHeight ) {
+				if ( element != null && element.getBoundingClientRect().bottom < window.innerHeight ) {
 					this.loadMoreProducts()
 				}
 			}
+		},
+		truncate : function( str, n, useWordBoundary ){
+			if (str.length <= n) { return str; }
+				const subString = str.substr(0, n-1); 
+				return (useWordBoundary
+					? subString.substr(0, subString.lastIndexOf(" "))
+					: subString) + "...";
 		}
   },
-	mounted() {
-		this.$nextTick(function() {
-			window.addEventListener('scroll', this.onScroll)
-		})
-	},
-	beforeUnmount() {
-		window.removeEventListener('scroll', this.onScroll)
-	}  
 }
 </script>

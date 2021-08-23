@@ -4,6 +4,7 @@ import Search from '../views/Search.vue'
 const routes = [
   {
     path: '/',
+		alias: '/search',
     name: 'Поиск товаров',
     component: Search
   },

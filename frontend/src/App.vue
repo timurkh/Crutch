@@ -12,11 +12,17 @@
 			</ul>
 			<ul class="nav navbar-nav ml-auto">
 				<li class="nav-item"><hr class="border-top"></li>
-				<li> <a id="navbar-userinfo" class="nav-link" href="/profile_settings/user-profile-editor"> Username [user@example.com]</a> </li>
+				<li> <a id="navbar-userinfo" class="nav-link" href="/profile_settings/user-profile-editor"> {{ user.name + " [" + user.email + "]" }}</a> </li>
 			</ul>
 		</div>
 	</nav>
-	<router-view/>
+
+	<div id="app" class="container-fluid p-4">
+    <div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
+      {{ error_message }}
+    </div>
+		<router-view :user='user'/>
+  </div>
 </template>
 
 <style>
@@ -41,3 +47,38 @@
   color: #42b983;
 }
 </style>
+
+<script>
+import { ref } from 'vue'
+import axios from 'axios'
+axios.defaults.baseURL = '/' + process.env.VUE_APP_BASE_URL
+
+export default {
+	name: 'App',
+
+	setup() {
+
+			let error_message = ref("")
+			let user = ref({}) 
+
+      axios({
+				method: "post", 
+				url: "/api/getCurrentUser"
+			})      
+      .then(res => {
+        user.value = res.data
+      })
+      .catch(error => {
+				console.log(error.response);
+        error_message.value = "Ошибка во время проверки сессии. " + error.response.data
+				
+				if (error.response.status == 401) {
+					window.setTimeout(function(){
+							window.location.href = "/login";
+						}, 5000);
+				}
+			})
+			return { error_message, user }
+    },
+	}
+</script>
