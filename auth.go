@@ -16,6 +16,7 @@ type UserInfo struct {
 	Id    int    `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	Admin bool   `json:admin"`
 }
 
 type City struct {
@@ -67,7 +68,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	log.Trace("Getting user info for sessionid ", sessionKey)
 
 	var encodedSessionData string
-	err = auth.db.conn.QueryRow(context.Background(), "select session_data from django_session where session_key=$1", sessionKey).Scan(&encodedSessionData)
+	err = auth.db.pool.QueryRow(context.Background(), "select session_data from django_session where session_key=$1", sessionKey).Scan(&encodedSessionData)
 	if err != nil {
 		err = fmt.Errorf("Session does not exist: %v", err)
 		log.Error(err)
@@ -104,8 +105,9 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
+	ui.Admin = udi.is_superuser
 
-	if !udi.verified {
+	if !udi.is_superuser && !udi.verified {
 		err = fmt.Errorf("User %s (%s) is not verified yet", ui.Name, ui.Email)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return err

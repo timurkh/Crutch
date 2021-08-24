@@ -39,6 +39,7 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 	var searchQuery SearchQuery
 	err = json.NewDecoder(r.Body).Decode(&searchQuery)
 	if err != nil {
+		log.Warn("Failed to decode search params: ", err)
 		return err
 	}
 
@@ -98,6 +99,8 @@ func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interfa
 		id, _ := strconv.Atoi(h["_id"].(string))
 		ids[i] = id
 	}
+
+	log.Debug("Quering details for product_ids ", ids)
 
 	products, err := mh.db.getProductEntries(ctx, ids, userId, cityId)
 

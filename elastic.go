@@ -22,6 +22,7 @@ type SearchQuery struct {
 	Name     string `json:"name"`
 	Property string `json:"property"`
 	CityID   int    `json:"cityId"`
+	Operator string `json:"operator"`
 }
 
 func initElasticHelper(addr string) (*ElasticHelper, error) {
@@ -47,13 +48,18 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 }
 
 func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits []interface{}, totalPages int, err error) {
+
+	operator := query.Operator
+	if operator == "" {
+		operator = "AND"
+	}
 	mustRequirements := make([]interface{}, 0)
 
 	if len(query.Text) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
 			"simple_query_string": map[string]interface{}{
 				"query":            query.Text,
-				"default_operator": "AND",
+				"default_operator": operator,
 				"analyzer":         "russian",
 				"fields": []interface{}{
 					"code^3",

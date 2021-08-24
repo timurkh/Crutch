@@ -1,18 +1,18 @@
 <template>
-	<div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
+	<div v-if="error_message.length > 0" class="alert alert-danger m-1 p-1 text-wrap text-break" role="alert">
 		{{ error_message }}
 	</div>
 
 
 	<form v-on:submit.prevent="onSearchSubmit" class="form-horizontal">
 		<div class="d-flex flex-wrap">
-			<div class="form-inline p-1 pb-0 pr-0 m-1 mr-0">
+			<div class="form-inline p-1 pb-0 pr-0">
 				<select id="city" class="form-control w-auto" v-model="searchQuery.cityId">
-					<option value="0">Город</option>
+					<option :value="Number(0)">Город</option>
 					<option v-for="city in user.cities" :value="city.id" :key="city.id">{{ city.name }} </option>
 				</select>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+			<div class="form-inline flex-grow-1 p-0 mx-1">
 				<input v-model="searchQuery.text" type="text" id="search-input" placeholder="Продукт" class="form-control flex-fill">
 			</div>
 			<div class="ml-auto p-1 mb-0">
@@ -21,23 +21,23 @@
 		</div>
 		
 		<div class="d-flex flex-wrap">
-			<div class="form-inline p-1 pb-0 pr-0 m-1 mr-0">
+			<div class="form-inline p-1 pb-0 pr-0">
 				<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Категория"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+			<div class="form-inline flex-grow-1 p-0 mx-1">
 				<input id="searchCode" v-model="searchQuery.code" class="form-control m-0" style="width:100%" placeholder="Артикул"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+			<div class="form-inline flex-grow-1 p-0 mx-1">
 				<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="Название"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 m-0 mr-1">
+			<div class="form-inline flex-grow-1 p-0 mx-1">
 				<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="Свойства"/>
 			</div>
 		</div>
 	</form>
 
 
-	<div class="table-responsive-lg m-1 mt-0 p-0 pr-1">
+	<div class="table-responsive-lg p-0 pr-1 mr-1">
 		<table class="table table-sm table-striped table-borderless m-1" ref="productsTable">
 			<thead class="thead-dark text-truncate">
 				<tr class="d-flex">
@@ -151,32 +151,39 @@ export default {
 		},
 		onSearchSubmit() {
 			history.pushState( Object.assign({}, this.searchQuery), this.searchQuery.text, "/" + process.env.VUE_APP_BASE_URL + "/search?" + this.searchQuery.text)  
-			this.searchProducts()
+			this.searchQuery.operator = ""
+			this.searchProducts().then( r  => { // eslint-disable-line no-unused-vars
+				if(this.searchResults===undefined || this.searchResults.length == 0) {
+					this.searchQuery.operator = "OR"
+					this.searchProducts()
+				}
+			})
 		},
     searchProducts() {
 			this.searchResults = []
       this.loading = true
-      axios({
-				method: "post", 
-				url: "/api/searchProducts",
-				data: this.searchQuery
-			})      
-      .then(res => {
-				this.error_message = ""
-        this.searchResults = res.data.results
-        this.page = res.data.page
-        this.totalPages = res.data.totalPages
 
-				this.currentSearchQuery = Object.assign({}, this.searchQuery)
-        this.loading = false
+			return axios({
+					method: "post", 
+					url: "/api/searchProducts",
+					data: this.searchQuery
+				})      
+				.then(res => {
+					this.error_message = ""
+					this.searchResults = res.data.results
+					this.page = res.data.page
+					this.totalPages = res.data.totalPages
 
-				this.$nextTick(doubleRaf(() => this.onScroll()))
-      })
-      .catch(error => {
-        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error)
-				this.searchResults = []
-        this.loading = false
-      })
+					this.currentSearchQuery = Object.assign({}, this.searchQuery)
+					this.loading = false
+
+					this.$nextTick(doubleRaf(() => this.onScroll()))
+				})
+				.catch(error => {
+					this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error)
+					this.searchResults = []
+					this.loading = false
+				})
     },
 		loadMoreProducts() {
       this.loading = true

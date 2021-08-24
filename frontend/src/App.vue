@@ -6,18 +6,18 @@
 		</button>
 
 		<div class="navbar-collapse collapse" id="main_nav">
-			<ul class="nav navbar-nav">
-				<li><router-link class="nav-link" to="/">Поиск товаров</router-link></li>
-				<li><router-link class="nav-link" to="/orders">Заказы</router-link></li>
+			<ul class="navbar-nav">
+				<li class="nav-item"><router-link class="nav-link" to="/">Поиск товаров</router-link></li>
+				<li class="nav-item"><router-link class="nav-link" to="/orders">Заказы</router-link></li>
 			</ul>
-			<ul class="nav navbar-nav ml-auto">
+			<ul class="navbar-nav ml-auto">
 				<li class="nav-item"><hr class="border-top"></li>
-				<li> <a id="navbar-userinfo" class="nav-link" href="/profile_settings/user-profile-editor"> {{ user.name + " [" + user.email + "]" }}</a> </li>
+				<li class="nav-item"> <a id="navbar-userinfo" class="nav-link" href="/profile_settings/user-profile-editor">{{user.name+"["+user.email+"]"}}</a></li>
 			</ul>
 		</div>
 	</nav>
 
-	<div id="app" class="container-fluid p-4">
+	<div id="app" class="container-fluid p-0 p-md-4">
     <div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
       {{ error_message }}
     </div>
