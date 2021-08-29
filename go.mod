@@ -12,7 +12,9 @@ require github.com/jackc/pgx/v4 v4.13.1-0.20210809134107-23b4656fc573
 
 require (
 	github.com/gorilla/context v1.1.1 // indirect
+	github.com/gorilla/schema v1.2.0 // indirect
 	github.com/jackc/pgconn v1.10.0
 	github.com/jackc/pgtype v1.8.1 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/xuri/excelize/v2 v2.4.1 // indirect
 )

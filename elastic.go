@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/elastic/go-elasticsearch/v5"
 )
@@ -75,7 +76,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	if len(query.Category) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
 			"wildcard": map[string]interface{}{
-				"category.name": query.Category + "*",
+				"category.name": strings.ToLower(query.Category) + "*",
 			},
 		},
 		)
@@ -84,7 +85,10 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	if len(query.Code) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
 			"match": map[string]interface{}{
-				"code": "*" + query.Code + "*",
+				"code": map[string]interface{}{
+					"query":    query.Code,
+					"operator": "AND",
+				},
 			},
 		},
 		)
@@ -92,8 +96,11 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	if len(query.Name) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"wildcard": map[string]interface{}{
-				"name": query.Name + "*",
+			"match": map[string]interface{}{
+				"name": map[string]interface{}{
+					"query":    query.Name,
+					"operator": "AND",
+				},
 			},
 		},
 		)
@@ -101,8 +108,8 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	if len(query.Property) > 2 {
 		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"match": map[string]interface{}{
-				"properties.value": query.Property,
+			"wildcard": map[string]interface{}{
+				"properties.value": strings.ToLower(query.Property) + "*",
 			},
 		},
 		)

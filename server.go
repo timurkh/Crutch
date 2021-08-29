@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -64,12 +65,16 @@ func main() {
 	methods := initMethodHandlers(auth, es, db)
 
 	router := mux.NewRouter().StrictSlash(true)
-	crutchAPI := router.PathPrefix("/" + baseUrl + "/api").Subrouter()
+	crutchAPI := router.PathPrefix("/" + baseUrl + "/methods").Subrouter()
 	crutchAPI.Use(auth.authMiddleware)
-	crutchAPI.Methods("POST").Path("/searchProducts").Handler(appHandler(methods.searchProductsHandler))
-	crutchAPI.Methods("POST").Path("/getCurrentUser").Handler(appHandler(methods.getCurrentUser))
+	crutchAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
+	crutchAPI.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
+	crutchAPI.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
+	crutchAPI.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
+	crutchAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
+
 	fs := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //warpHandler is used to handle history mode URLs
 	crutch.PathPrefix("/").Handler(http.StripPrefix("/"+baseUrl, fs))
 
@@ -102,11 +107,18 @@ func (w *NotFoundRedirectRespWr) Write(p []byte) (int, error) {
 
 func wrapHandler(h http.Handler, baseUrl string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		nfrw := &NotFoundRedirectRespWr{ResponseWriter: w}
-		h.ServeHTTP(nfrw, r)
-		if nfrw.status == 404 {
-			log.Printf("Redirecting %s to %s", r.RequestURI, baseUrl)
-			http.Redirect(w, r, baseUrl, http.StatusFound)
+		if !strings.HasPrefix(r.RequestURI, baseUrl+"/methods/") {
+			nfrw := &NotFoundRedirectRespWr{ResponseWriter: w}
+			h.ServeHTTP(nfrw, r)
+
+			if nfrw.status == http.StatusNotFound {
+				log.Info("Requested ", r.RequestURI, ", Path ", r.URL.Path)
+				r.URL.Path = "/"
+				w.Header().Set("Content-Type", "text/html")
+				h.ServeHTTP(w, r)
+			}
+		} else {
+			h.ServeHTTP(w, r)
 		}
 	}
 }

@@ -13,10 +13,11 @@ import (
 )
 
 type UserInfo struct {
-	Id    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Admin bool   `json:admin"`
+	Id            int    `json:"id"`
+	Name          string `json:"name"`
+	Email         string `json:"email"`
+	Admin         bool   `json:"admin"`
+	CanReadOrders bool   `json:can_read_orders"`
 }
 
 type City struct {
@@ -106,6 +107,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
 	ui.Admin = udi.is_superuser
+	ui.CanReadOrders = udi.can_read_orders
 
 	if !udi.is_superuser && !udi.verified {
 		err = fmt.Errorf("User %s (%s) is not verified yet", ui.Name, ui.Email)

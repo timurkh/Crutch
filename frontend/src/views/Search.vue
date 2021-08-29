@@ -53,7 +53,7 @@
 			<tbody > 
 				<tr class="d-flex" v-for="(product, index) in searchResults" :key="index">
 
-					<td class="text-wrap col-2 "> {{product.category}}</td>
+					<td class="text-wrap col-2 "> {{showInDevMode("[" + product.score + "] ") + product.category}}</td>
 					<td class="text-wrap col-2 "> {{product.code}} </td>
 					<td class="text-wrap col-2 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
 					<td class="text-wrap col-2 " data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
@@ -77,16 +77,16 @@
 
 .<style>
 .form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
-            color: #888888;
+            color: #999999;
             opacity: 1; /* Firefox */
 }
 
 .form-control:-ms-input-placeholder { /* Internet Explorer 10-11 */
-            color: #888888;
+            color: #999999;
 }
 
 .form-control::-ms-input-placeholder { /* Microsoft Edge */
-            color: #888888;
+            color: #999999;
  }
 </style>
 
@@ -137,7 +137,7 @@ export default {
 	},
 	watch : {
 		user : function(newVal){
-			if(newVal.cities == null || newVal.cities.length == 0) {
+			if(!newVal.admin && (newVal.cities == null || newVal.cities.length == 0)) {
 				this.error_message = "У вашего аккаунта не задано ни одного склада на который можно доставить груз"
 			}
 		}
@@ -146,6 +146,12 @@ export default {
 		window.removeEventListener('scroll', this.onScroll)
 	},  
   methods: {
+		showInDevMode : function(value) {
+			if(process.env.NODE_ENV === 'development') {
+				return value;
+			}
+			return ""
+		},
 		stripHTML: function (value) {
 			return value.replace(/<\/?[^>]+>/ig, " ");
 		},
@@ -159,14 +165,11 @@ export default {
 				}
 			})
 		},
-    searchProducts() {
-			this.searchResults = []
-      this.loading = true
-
+		getProductsList() {
 			return axios({
-					method: "post", 
-					url: "/api/searchProducts",
-					data: this.searchQuery
+					method: "GET", 
+					url: "/methods/products",
+					params: this.searchQuery
 				})      
 				.then(res => {
 					this.error_message = ""
@@ -174,7 +177,6 @@ export default {
 					this.page = res.data.page
 					this.totalPages = res.data.totalPages
 
-					this.currentSearchQuery = Object.assign({}, this.searchQuery)
 					this.loading = false
 
 					this.$nextTick(doubleRaf(() => this.onScroll()))
@@ -184,29 +186,19 @@ export default {
 					this.searchResults = []
 					this.loading = false
 				})
+		},
+    searchProducts() {
+			this.searchResults = []
+			this.currentSearchQuery = Object.assign({}, this.searchQuery)
+      this.loading = true
+
+			this.getProductsList()
     },
 		loadMoreProducts() {
       this.loading = true
 			this.currentSearchQuery.page = this.page+1
-      axios({
-				method: "post", 
-				url: "/api/searchProducts",
-				data: this.currentSearchQuery
-			})      
-      .then(res => {
-				this.error_message = ""
-        this.searchResults = this.searchResults.concat(res.data.results)
-        this.page = res.data.page
-        this.totalPages = res.data.totalPages
 
-        this.loading = false
-				this.$nextTick(doubleRaf(() => this.onScroll()))
-      })
-      .catch(error => {
-        this.error_message = "Ошибка во время поиска: " + this.getAxiosErrorMessage(error)
-				this.searchResults = []
-        this.loading = false
-      })
+			this.getProductsList()
 		},
     getAxiosErrorMessage : function(error) {
       if (error.response != null && error.response.data != null && error.response.data != "") {

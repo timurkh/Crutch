@@ -62,8 +62,8 @@ export default {
 			let user = ref({}) 
 
       axios({
-				method: "post", 
-				url: "/api/getCurrentUser"
+				method: "GET", 
+				url: "/methods/currentUser"
 			})      
       .then(res => {
         user.value = res.data
