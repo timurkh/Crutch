@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 
@@ -57,7 +58,9 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 	}
 
 	var searchQuery SearchQuery
-	err = schema.NewDecoder().Decode(&searchQuery, r.URL.Query())
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	err = decoder.Decode(&searchQuery, r.URL.Query())
 	if err != nil {
 		err = fmt.Errorf("Failed to decode search params: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -74,7 +77,7 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 			return err
 		}
 
-		entries_, err := mh.getResponseEntries(r.Context(), hits, userInfo, searchQuery.CityID)
+		entries_, err := mh.getResponseEntries(r.Context(), hits, userInfo, searchQuery.CityID, searchQuery.InStockOnly, searchQuery.Supplier)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return err
@@ -110,7 +113,7 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 
 }
 
-func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interface{}, userInfo UserInfo, cityId int) ([]map[string]interface{}, error) {
+func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interface{}, userInfo UserInfo, cityId int, inStockOnly bool, supplier string) ([]map[string]interface{}, error) {
 
 	ids := make([]int, len(hits))
 
@@ -126,7 +129,7 @@ func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interfa
 
 	log.Debug("Quering details for product_ids ", products_score)
 
-	products, err := mh.db.getProductEntries(ctx, ids, products_score, userInfo, cityId)
+	products, err := mh.db.getProductEntries(ctx, ids, products_score, userInfo, cityId, inStockOnly, supplier)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve list of products: %v", err)
@@ -198,7 +201,7 @@ func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request)
 		Cities []City `json:"cities"`
 	}{userInfo, cities})
 
-	log.Info(userInfo, cities)
+	log.Info(userInfo)
 
 	if err != nil {
 		err = fmt.Errorf("Error while preparing json reponse: %v", err)
@@ -210,11 +213,66 @@ func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request)
 
 }
 
-func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
+func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.Request) error {
+
+	var filter CounterpartsFilter
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	err := decoder.Decode(&filter, r.URL.Query())
+	if err != nil {
+		err = fmt.Errorf("Failed to decode filter: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
 
 	userInfo := mh.auth.getUserInfo(r)
 
-	orders, err := mh.db.getOrders(r.Context(), userInfo)
+	if !userInfo.Admin {
+		http.Error(w, "This resource requires admin privileges", http.StatusUnauthorized)
+		return err
+	}
+
+	log.Info("Getting list of counterparts, filter ", filter)
+
+	counterparts, err := mh.db.getCounterparts(r.Context(), filter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(struct {
+		Counterparts interface{} `json:"counterparts"`
+	}{counterparts})
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+}
+
+func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
+
+	var ordersFilter OrdersFilter
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	err := decoder.Decode(&ordersFilter, r.URL.Query())
+	if err != nil {
+		err = fmt.Errorf("Failed to decode filter: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	log.Info("Getting list of orders, filter ", ordersFilter)
+
+	orders, err := mh.db.getOrders(r.Context(), userInfo, ordersFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -271,64 +329,110 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 
 func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.Request) error {
 
+	var ordersFilter OrdersFilter
+	err := schema.NewDecoder().Decode(&ordersFilter, r.URL.Query())
+	if err != nil {
+		err = fmt.Errorf("Failed to decode filter: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
 	file, err := os.CreateTemp("/tmp", "*.xlsx")
 	if err != nil {
-		log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
 	defer os.Remove(file.Name())
 
 	xls := excelize.NewFile()
+	streamWriter, err := xls.NewStreamWriter("Sheet1")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
 
-	xls.SetCellValue("Sheet1", "A1", "[8]")
-	xls.SetCellValue("Sheet1", "B1", "[8]")
-	xls.SetCellValue("Sheet1", "D1", "(2)")
-	xls.SetCellValue("Sheet1", "E1", "(2а)")
-	xls.SetCellValue("Sheet1", "F1", "(2б)")
-	xls.SetCellValue("Sheet1", "G1", "(3)")
-	xls.SetCellValue("Sheet1", "H1", "(3)")
-	xls.SetCellValue("Sheet1", "I1", "(4)")
-	xls.SetCellValue("Sheet1", "J1", "(4)")
-	xls.SetCellValue("Sheet1", "K1", "(6а)")
-	xls.SetCellValue("Sheet1", "O1", "(6б)")
-	xls.SetCellValue("Sheet1", "Q1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "S1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "T1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "U1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "V1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "W1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "X1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "Y1", "Табличная часть УПД")
-	xls.SetCellValue("Sheet1", "Z1", "[11]")
-	xls.SetCellValue("Sheet1", "A2", "Номер заказа")
-	xls.SetCellValue("Sheet1", "B2", "Дата заказа")
-	xls.SetCellValue("Sheet1", "C2", "Дата отгрузки")
-	xls.SetCellValue("Sheet1", "D2", "Продавец")
-	xls.SetCellValue("Sheet1", "E2", "Адрес")
-	xls.SetCellValue("Sheet1", "F2", "ИНН/КПП продавца")
-	xls.SetCellValue("Sheet1", "G2", "Грузоотправитель")
-	xls.SetCellValue("Sheet1", "H2", "Адрес прузоотправителя")
-	xls.SetCellValue("Sheet1", "I2", "Грузополучатель")
-	xls.SetCellValue("Sheet1", "J2", "Адрес прузополучателя")
-	xls.SetCellValue("Sheet1", "K2", "Покупатель")
-	xls.SetCellValue("Sheet1", "L2", "Адрес покупателя")
-	xls.SetCellValue("Sheet1", "M2", "ИНН поставщика")
-	xls.SetCellValue("Sheet1", "N2", "КПП поставщика")
-	xls.SetCellValue("Sheet1", "O2", "ИНН покупателя")
-	xls.SetCellValue("Sheet1", "P2", "КПП покупателя")
-	xls.SetCellValue("Sheet1", "Q2", "Код товара/работ, услуг")
-	xls.SetCellValue("Sheet1", "R2", "Наименование товара")
-	xls.SetCellValue("Sheet1", "S2", "Единица обозначения - условное обозначение (национальное)")
-	xls.SetCellValue("Sheet1", "T2", "Количество (объём)")
-	xls.SetCellValue("Sheet1", "U2", "Цена (тариф) за единицу измерения")
-	xls.SetCellValue("Sheet1", "V2", "Стоимость товаров (работ, услуг), имущественных прав без налога - всего")
-	xls.SetCellValue("Sheet1", "W2", "Налоговая ставка")
-	xls.SetCellValue("Sheet1", "X2", "Сумма налога, предъявляемая покупателю")
-	xls.SetCellValue("Sheet1", "Y2", "Стоимость товаров (работ, услуг), имущественных прав с налогом - всего")
-	xls.SetCellValue("Sheet1", "Z2", "Дата отгрузки, передачи (сдачи)")
+	streamWriter.SetRow("A1", []interface{}{
+		excelize.Cell{Value: "[8]"},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{Value: "(2)"},
+		excelize.Cell{Value: "(2а)"},
+		excelize.Cell{Value: "(2б)"},
+		excelize.Cell{Value: "(3)"},
+		excelize.Cell{},
+		excelize.Cell{Value: "(4)"},
+		excelize.Cell{},
+		excelize.Cell{Value: "(6) и [19]"},
+		excelize.Cell{Value: "(6а)"},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{Value: "(6б)"},
+		excelize.Cell{},
+		excelize.Cell{Value: "Табличная часть УПД"},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{Value: "Статус заказа \"В пути\""},
+		excelize.Cell{},
+		excelize.Cell{Value: "Статус заказа \"Доставлен\""},
+		excelize.Cell{},
+		excelize.Cell{Value: "Статус заказа \"Принят\""},
+		excelize.Cell{},
+	})
+
+	streamWriter.MergeCell("A1", "B1")
+	streamWriter.MergeCell("G1", "H1")
+	streamWriter.MergeCell("I1", "J1")
+	streamWriter.MergeCell("O1", "P1")
+	streamWriter.MergeCell("Q1", "Y1")
+	streamWriter.MergeCell("AA1", "AB1")
+	streamWriter.MergeCell("AC1", "AD1")
+	streamWriter.MergeCell("AE1", "AF1")
+
+	streamWriter.SetRow("A2", []interface{}{
+		excelize.Cell{Value: "Номер заказа"},
+		excelize.Cell{Value: "Дата заказа"},
+		excelize.Cell{Value: "Дата согласования"},
+		excelize.Cell{Value: "Продавец"},
+		excelize.Cell{Value: "Адрес"},
+		excelize.Cell{Value: "ИНН/КПП продавца"},
+		excelize.Cell{Value: "Грузоотправитель"},
+		excelize.Cell{Value: "Адрес грузоотправителя"},
+		excelize.Cell{Value: "Грузополучатель"},
+		excelize.Cell{Value: "Адрес грузополучателя"},
+		excelize.Cell{Value: "Покупатель"},
+		excelize.Cell{Value: "Адрес покупателя"},
+		excelize.Cell{Value: "ИНН поставщика"},
+		excelize.Cell{Value: "КПП поставщика"},
+		excelize.Cell{Value: "ИНН покупателя"},
+		excelize.Cell{Value: "КПП покупателя"},
+		excelize.Cell{Value: "Код товара/работ, услуг"},
+		excelize.Cell{Value: "Наименование товара"},
+		excelize.Cell{Value: "Единица обозначения - условное обозначение (национальное)"},
+		excelize.Cell{Value: "Количество (объём)"},
+		excelize.Cell{Value: "Цена (тариф) за единицу измерения"},
+		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав без налога - всего"},
+		excelize.Cell{Value: "Налоговая ставка"},
+		excelize.Cell{Value: "Сумма налога, предъявляемая покупателю"},
+		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав с налогом - всего"},
+		excelize.Cell{Value: "Дата поставки (предполагаемая)"},
+		excelize.Cell{Value: "Дата отгрузки"},
+		excelize.Cell{Value: "Время отгрузки"},
+		excelize.Cell{Value: "Дата передачи"},
+		excelize.Cell{Value: "Время передачи"},
+		excelize.Cell{Value: "Дата приёмки"},
+		excelize.Cell{Value: "Время приёмки"},
+		excelize.Cell{Value: "Статус"},
+	})
 
 	userInfo := mh.auth.getUserInfo(r)
-	orders, err := mh.db.getOrders(r.Context(), userInfo)
+	orders, err := mh.db.getOrders(r.Context(), userInfo, ordersFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -336,10 +440,110 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 
 	row := 3
 	for _, order := range orders {
-		xls.SetCellValue("Sheet1", fmt.Sprintf("A%v", row), order["contractor_number"])
+		orderStartRow := row
+
+		orderDetails, err := mh.db.getOrder(r.Context(), userInfo, order["id"].(int))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return err
+		}
+
+		if len(orderDetails) == 0 {
+			continue
+		}
+
+		orderDetail := orderDetails[0]
+		sum := orderDetail["sum"].(float64)
+		nds := orderDetail["nds"].(float64)
+		tax := math.Floor(sum*nds) / 100
+
+		streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
+			excelize.Cell{Value: order["contractor_number"]},
+			excelize.Cell{Value: toDate(order["ordered_date"])},
+			excelize.Cell{Value: toDate(order["closed_date"])},
+			excelize.Cell{Value: "Общество с ограниченной ответственностью \"Центр Промышленных Закупок\""},
+			excelize.Cell{Value: "127299, г. Москва, ул. Клары Цеткин, д. 2, помещ. 138"},
+			excelize.Cell{Value: "3528136252/771301001"},
+			excelize.Cell{Value: order["seller_name"]},
+			excelize.Cell{Value: order["seller_address"]},
+			excelize.Cell{Value: order["customer_name"]},
+			excelize.Cell{Value: order["customer_address"]},
+			excelize.Cell{Value: order["customer_name"]},
+			excelize.Cell{Value: order["customer_address"]},
+			excelize.Cell{Value: order["seller_inn"]},
+			excelize.Cell{Value: order["seller_kpp"]},
+			excelize.Cell{Value: order["customer_inn"]},
+			excelize.Cell{Value: order["customer_kpp"]},
+
+			excelize.Cell{Value: orderDetail["product_id"]},
+			excelize.Cell{Value: orderDetail["name"]},
+			excelize.Cell{Value: "Шт"},
+			excelize.Cell{Value: orderDetail["count"]},
+			excelize.Cell{Value: orderDetail["price"]},
+			excelize.Cell{Value: sum},
+			excelize.Cell{Value: nds},
+			excelize.Cell{Value: tax},
+			excelize.Cell{Value: tax + sum},
+
+			excelize.Cell{Value: toDate(order["shipping_date_est"])},
+			excelize.Cell{Value: toDate(order["shipped_date"])},
+			excelize.Cell{Value: toTime(order["shipped_date"])},
+			excelize.Cell{Value: toDate(order["delivered_date"])},
+			excelize.Cell{Value: toTime(order["delivered_date"])},
+			excelize.Cell{Value: toDate(order["accepted_date"])},
+			excelize.Cell{Value: toTime(order["accepted_date"])},
+			excelize.Cell{Value: order["status"]},
+		})
 		row++
+
+		for i := 1; i < len(orderDetails); i++ {
+			orderDetail = orderDetails[i]
+
+			sum := orderDetail["sum"].(float64)
+			nds := orderDetail["nds"].(float64)
+			tax := math.Floor(sum*nds) / 100
+
+			streamWriter.SetRow(fmt.Sprintf("Q%v", row), []interface{}{
+				excelize.Cell{Value: orderDetail["product_id"]},
+				excelize.Cell{Value: orderDetail["name"]},
+				excelize.Cell{Value: "Шт"},
+				excelize.Cell{Value: orderDetail["count"]},
+				excelize.Cell{Value: orderDetail["price"]},
+				excelize.Cell{Value: sum},
+				excelize.Cell{Value: nds},
+				excelize.Cell{Value: tax},
+				excelize.Cell{Value: tax + sum},
+			})
+
+			row++
+		}
+
+		if len(orderDetails) > 1 {
+
+			for col := 'A'; col <= 'P'; col++ {
+				err = streamWriter.MergeCell(fmt.Sprintf("%c%v", col, orderStartRow), fmt.Sprintf("%c%v", col, row-1))
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return err
+				}
+			}
+
+			for _, col := range []string{"Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG"} {
+				err = streamWriter.MergeCell(fmt.Sprintf("%s%v", col, orderStartRow), fmt.Sprintf("%s%v", col, row-1))
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return err
+				}
+			}
+		}
+
 	}
 
+	err = streamWriter.Flush()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
 	xls.SaveAs(file.Name())
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))

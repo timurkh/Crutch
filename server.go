@@ -67,6 +67,8 @@ func main() {
 	router := mux.NewRouter().StrictSlash(true)
 	crutchAPI := router.PathPrefix("/" + baseUrl + "/methods").Subrouter()
 	crutchAPI.Use(auth.authMiddleware)
+	crutchAPI.Methods("GET").Path("/counterparts").Handler(appHandler(methods.getCounterpartsHandler))
+	//	crutchAPI.Methods("GET").Path("/counterparts/excel").Handler(appHandler(methods.getCounterpartsExcelHandler))
 	crutchAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 	crutchAPI.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
 	crutchAPI.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))

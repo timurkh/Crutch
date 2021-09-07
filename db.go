@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgtype"
@@ -10,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v4/log/logrusadapter"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
+
+type CounterpartsFilter struct {
+	Start time.Time `schema:"start"`
+	End   time.Time `schema:"end"`
+	Text  string    `schema:"text"`
+	Role  int       `schema:"role"`
+}
+
+type OrdersFilter struct {
+	Start            time.Time `schema:"start"`
+	End              time.Time `schema:"end"`
+	Text             string    `schema:"text"`
+	SelectedStatuses []int     `schema:"selectedStatuses[]"`
+}
 
 type DBHelper struct {
 	pool *pgxpool.Pool
@@ -38,9 +53,11 @@ type UserDBInfo struct {
 	last_name       string
 	email           string
 	is_superuser    bool
+	is_staff        bool
 	can_read_orders bool
 	verified        bool
 	blocked         bool
+	contractor_id   int
 }
 
 func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
@@ -50,9 +67,11 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 			last_name, 
 			email, 
 			is_superuser, 
+			is_staff,
 			COALESCE( staff_can_read_orders, FALSE) staff_can_read_orders,
 			verified, 
-			blocked 
+			blocked,
+			COALESCE( contractor_id, 0) contractor_id
 		FROM 
 			core_user cu 
 			LEFT JOIN (
@@ -62,7 +81,8 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 				FROM core_user_user_permissions up 
 				WHERE permission_id=1067) ro 
 			ON (ro.user_id=cu.id AND cu.is_staff) 
-		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.can_read_orders, &ui.verified, &ui.blocked)
+			LEFT JOIN core_user_contractors cuc ON cu.id = cuc.user_id
+		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.can_read_orders, &ui.verified, &ui.blocked, &ui.contractor_id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve user info: %v", err)
 	}
@@ -76,9 +96,9 @@ func (db *DBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInf
 	var rows pgx.Rows
 
 	if userInfo.Admin {
-		rows, _ = db.pool.Query(ctx, "SELECT distinct id, city FROM company_city")
+		rows, _ = db.pool.Query(ctx, "SELECT distinct id, city FROM company_city ORDER BY city")
 	} else {
-		rows, _ = db.pool.Query(ctx, "SELECT distinct city_id, city FROM core_user cu JOIN core_user_contractors cuc on cu.id = cuc.user_id join consignee_consignee con using(contractor_id) join company_city com on com.id = con.city_id where cuc.user_id=$1", userInfo.Id)
+		rows, _ = db.pool.Query(ctx, "SELECT distinct city_id, city FROM core_user cu JOIN core_user_contractors cuc on cu.id = cuc.user_id join consignee_consignee con using(contractor_id) join company_city com on com.id = con.city_id where cuc.user_id=$1 ORDER BY city", userInfo.Id)
 	}
 
 	cities = make([]City, 0)
@@ -94,12 +114,23 @@ func (db *DBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInf
 	return cities, rows.Err()
 }
 
-func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int) (products []map[string]interface{}, err error) {
+func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []map[string]interface{}, err error) {
 
 	args := []interface{}{product_ids}
 
 	supplier_warehouses := ""
-	if city_id > 0 || !userInfo.Admin {
+	if userInfo.Admin {
+		if city_id > 0 {
+			supplier_warehouses = `
+			AND pr.warehouse_id IN (
+			SELECT sw.id 
+			FROM supplier_warehouse sw 
+				INNER JOIN supplier_warehouse_delivery_cities swc ON (sw.id = swc.warehouse_id) 
+			WHERE sw.is_visible = true  
+				AND swc.city_id = $2)`
+			args = append(args, city_id)
+		}
+	} else {
 		client_cities := `
 		SELECT DISTINCT city_id 
 		FROM core_user_contractors cuc 
@@ -142,7 +173,7 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	` + supplier_warehouses + `
 	GROUP BY pp.id, ordering`
 
-	rows, _ := db.pool.Query(ctx, `
+	query := `
 	SELECT
 		pp.id,
 		pc.name as category_name,
@@ -153,7 +184,7 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		pp.product_price,
 		cc.name as supplier
 	FROM 
-		( `+product_quantity+` 
+		( ` + product_quantity + ` 
 			) pr 
 		JOIN product_product pp USING (id) 
 		JOIN product_category pc ON ( pp.category_id = pc.id )
@@ -161,8 +192,21 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
 	WHERE 
 		pc.hidden = false
-		AND (pp.enable_preorder = true OR NOT pr.rest = 0.0)
-	ORDER BY ordering`, args...)
+		AND (NOT pr.rest = 0.0`
+
+	if !inStockOnly {
+		query += " OR pp.enable_preorder = true"
+	}
+	query += ")"
+
+	if supplier != "" {
+		args = append(args, "%"+supplier+"%")
+		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args)) + ""
+	}
+
+	query += " ORDER BY ordering"
+
+	rows, _ := db.pool.Query(ctx, query, args...)
 
 	products = make([]map[string]interface{}, 0)
 	for rows.Next() {
@@ -172,24 +216,24 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		if err != nil {
 			return nil, err
 		}
-		id := int(values[0].(int32))
+		id := toInt(values[0])
 
 		if values[1] != nil {
-			category = values[1].(string)
+			category = toString(values[1])
 		}
 		name = values[2].(string)
 		if values[3] != nil {
-			code = values[3].(string)
+			code = toString(values[3])
 		}
 		if values[4] != nil {
-			description = values[4].(string)
+			description = toString(values[4])
 		}
 
 		p := values[6].(pgtype.Numeric)
 		p.AssignTo(&price)
 
 		if values[7] != nil {
-			supplier = values[7].(string)
+			supplier = toString(values[7])
 		}
 
 		entry := map[string]interface{}{
@@ -198,8 +242,8 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 			"code":        code,
 			"name":        name,
 			"description": description,
-			"rest":        fmt.Sprintf("%v", values[5]),
-			"price":       fmt.Sprintf("%v", price),
+			"rest":        toFloat(values[5]),
+			"price":       price,
 			"supplier":    supplier,
 		}
 		entry["score"] = products_score[id]
@@ -223,21 +267,149 @@ func toFloat(v interface{}) float64 {
 	return v.(float64)
 }
 
+func toInt(v interface{}) int {
+	if v == nil {
+		return 0
+	}
+	return int(v.(int32))
+}
+
+func toDate(v interface{}) string {
+	if v != nil {
+		return v.(time.Time).Format("2006-01-02")
+	}
+	return ""
+}
+
+func toTime(v interface{}) string {
+	if v != nil {
+		return v.(time.Time).Format("15:04:05")
+	}
+	return ""
+}
+
 func (db *DBHelper) ordersAccessRightsFilter(userInfo UserInfo, args []interface{}) (string, []interface{}) {
 	filterUsers := ""
 	if !userInfo.Admin && !userInfo.CanReadOrders {
+		args = append(args, userInfo.Id)
+
 		filterUsers = ` AND oo.user_id in (
 		SELECT ou.id 
 		FROM core_user ou 
-			JOIN core_user cu ON (ou.lft < cu.rght  AND ou.lft > cu.lft  AND ou.tree_id = cu.tree_id) 
-		WHERE cu.id=$1)
-		AND FALSE` //temporary disable for non staff
-		args = append(args, userInfo.Id)
+			JOIN core_user cu ON (ou.lft <= cu.rght  AND ou.lft >= cu.lft  AND ou.tree_id = cu.tree_id) 
+		WHERE cu.id=$`
+		filterUsers += strconv.Itoa(len(args)) + ")"
+
 	}
 	return filterUsers, args
 }
 
-func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []map[string]interface{}, err error) {
+func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilter) (counterparts []map[string]interface{}, err error) {
+
+	args := make([]interface{}, 0)
+	dateFilter := ""
+
+	// filter by date
+	args = append(args, filter.Start)
+	dateFilter += " AND order_order.date_ordered>$" + strconv.Itoa(len(args))
+
+	args = append(args, filter.End)
+	dateFilter += " AND order_order.date_ordered<$" + strconv.Itoa(len(args))
+
+	query := `
+		SELECT * FROM (
+			SELECT 
+				id,
+				content_type_id AS role_id,
+				name, 
+				inn,
+				kpp,
+				jur_address AS address,
+				CASE WHEN content_type_id=79 THEN 'Покупатель' 
+					WHEN content_type_id=186 THEN 'Поставщик'
+					ELSE '-'
+				END AS role, 
+				CASE WHEN content_type_id=79 THEN contractor_user_count 
+					WHEN content_type_id=186 THEN supplier_user_count
+					ELSE 0 
+				END AS user_count,
+				CASE WHEN content_type_id=79 THEN contractor_date_joined 
+					WHEN content_type_id=186 THEN supplier_date_joined
+					ELSE NULL 
+				END AS date_joined,
+				CASE WHEN content_type_id=79 THEN contractor_last_login 
+					WHEN content_type_id=186 THEN supplier_last_login
+					ELSE NULL 
+				END AS last_login,
+				CASE WHEN content_type_id=79 THEN contractor_order_count 
+					WHEN content_type_id=186 THEN supplier_order_count
+					ELSE NULL 
+				END AS order_count
+			FROM company_company 
+				LEFT JOIN (SELECT COUNT(*) supplier_user_count, MIN(date_joined) AS supplier_date_joined, MAX(last_login) AS supplier_last_login, supplier_id 
+					FROM core_user WHERE verified=TRUE AND blocked=FALSE GROUP BY supplier_id) cu 
+					ON (object_id = cu.supplier_id AND content_type_id=186) 
+				LEFT JOIN (SELECT COUNT (*) contractor_user_count, MIN(date_joined) contractor_date_joined, MAX(last_login) contractor_last_login, contractor_id 
+					FROM core_user_contractors JOIN core_user cu ON (cu.id = user_id AND verified=TRUE and blocked=FALSE) GROUP BY contractor_id) cuc 
+					ON (object_id=cuc.contractor_id AND content_type_id=79)
+				LEFT JOIN (SELECT COUNT (*) supplier_order_count, supplier_id FROM order_order WHERE id NOT IN (1, 17) `
+	query += dateFilter
+	query += ` GROUP BY supplier_id) so
+					ON (object_id = so.supplier_id AND content_type_id=186)
+				LEFT JOIN (SELECT COUNT (*) contractor_order_count, contractor_id FROM order_order WHERE id NOT IN (1, 17) `
+	query += dateFilter
+	query += ` GROUP BY contractor_id) co
+					ON (object_id = co.contractor_id AND content_type_id=79)
+		)s WHERE user_count>0 `
+
+	// filter by text
+	if filter.Text != "" {
+		args = append(args, "%"+filter.Text+"%")
+		n := strconv.Itoa(len(args))
+		query += " AND (name ILIKE $" + n
+		query += " OR inn ILIKE $" + n
+		query += " OR kpp ILIKE $" + n
+		query += " OR address ILIKE $" + n
+		query += ")"
+	}
+
+	if filter.Role > 0 {
+		args = append(args, filter.Role)
+		query += " AND role_id = $" + strconv.Itoa(len(args))
+	}
+
+	query += ` ORDER BY id`
+
+	rows, _ := db.pool.Query(ctx, query, args...)
+
+	counterparts = make([]map[string]interface{}, 0)
+	for rows.Next() {
+
+		values, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+
+		entry := map[string]interface{}{
+			"id":          values[0],
+			"type_id":     values[1],
+			"name":        values[2],
+			"inn":         values[3],
+			"kpp":         values[4],
+			"address":     values[5],
+			"role":        values[6],
+			"user_count":  values[7],
+			"date_joined": values[8],
+			"last_login":  values[9],
+			"order_count": values[10],
+		}
+		counterparts = append(counterparts, entry)
+	}
+
+	return counterparts, rows.Err()
+}
+
+func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []map[string]interface{}, err error) {
 
 	args := make([]interface{}, 0)
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo, args)
@@ -246,7 +418,7 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 		SELECT oo.id, 
 			ov.order_sum,
 			os.status,
-			oc.date_ordered,
+			dor.date_ordered,
 			oo.date_closed,
 			oo.shipping_date,
 			seller.object_id as seller_id,
@@ -264,7 +436,10 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 			cc.name as consignee_name,
 			oo.on_order_coupon,
 			oo.on_order_coupon_fixed,
-			oo.contractor_number
+			oo.contractor_number, 
+			ds.date_shipped,
+			dd.date_delivered,
+			da.date_accepted
 		FROM order_order oo 
 			JOIN (
 				SELECT oo.id, 
@@ -277,14 +452,53 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 				SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_ordered
 				FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id 
 				WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '1'
-				GROUP BY object_id_int) oc ON oc.order_id = oo.id 
+				GROUP BY object_id_int) dor ON dor.order_id = oo.id 
+			LEFT JOIN (
+				SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_shipped
+				FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id 
+				WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '21'
+				GROUP BY object_id_int) ds ON ds.order_id = oo.id 
+			LEFT JOIN (
+				SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_delivered
+				FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id 
+				WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '15'
+				GROUP BY object_id_int) dd ON dd.order_id = oo.id 
+			LEFT JOIN (
+				SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_accepted
+				FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id 
+				WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '22'
+				GROUP BY object_id_int) da ON da.order_id = oo.id 
 			JOIN order_orderstatus os ON (oo.status_id = os.id)
 			JOIN company_company seller ON (seller.object_id=oo.supplier_id AND seller.content_type_id=186)
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
 		WHERE oo.status_id NOT IN (17, 18)`
-	queryOrders = queryOrders + filterUsers + `	ORDER BY oc.date_ordered DESC`
+
+	// filter by date
+	args = append(args, ordersFilter.End)
+	queryOrders += " AND dor.date_ordered<$" + strconv.Itoa(len(args))
+
+	args = append(args, ordersFilter.Start)
+	queryOrders += " AND dor.date_ordered>$" + strconv.Itoa(len(args))
+
+	// filter by text
+	if ordersFilter.Text != "" {
+		args = append(args, "%"+ordersFilter.Text+"%")
+		queryOrders += " AND (seller.name ILIKE $" + strconv.Itoa(len(args))
+		queryOrders += " OR customer.name ILIKE $" + strconv.Itoa(len(args))
+		queryOrders += " OR cc.name ILIKE $" + strconv.Itoa(len(args))
+		queryOrders += " OR cu.last_name ILIKE $" + strconv.Itoa(len(args))
+		queryOrders += " OR cu.first_name ILIKE $" + strconv.Itoa(len(args))
+		queryOrders += " OR cu.middle_name ILIKE $" + strconv.Itoa(len(args)) + ")"
+	}
+
+	if len(ordersFilter.SelectedStatuses) > 0 {
+		args = append(args, ordersFilter.SelectedStatuses)
+		queryOrders += " AND status_id = ANY($" + strconv.Itoa(len(args)) + ")"
+	}
+
+	queryOrders = queryOrders + filterUsers + `	ORDER BY dor.date_ordered DESC`
 	rows, _ := db.pool.Query(ctx, queryOrders, args...)
 
 	orders = make([]map[string]interface{}, 0)
@@ -303,16 +517,6 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 		}
 
 		status := values[2].(string)
-		var date_ordered, date_closed, shipping_date string
-		if values[3] != nil {
-			date_ordered = values[3].(time.Time).Format("2006-01-02")
-		}
-		if values[4] != nil {
-			date_closed = values[4].(time.Time).Format("2006-01-02")
-		}
-		if values[5] != nil {
-			shipping_date = values[5].(time.Time).Format("2006-01-02")
-		}
 		seller_id := int(values[6].(int32))
 		seller_name := toString(values[7])
 		seller_inn := toString(values[8])
@@ -347,9 +551,9 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 			"contractor_number":     contractor_number,
 			"sum":                   sum,
 			"status":                status,
-			"ordered_date":          date_ordered,
-			"closed_date":           date_closed,
-			"shipping_date":         shipping_date,
+			"ordered_date":          values[3],
+			"closed_date":           values[4],
+			"shipping_date_est":     values[5],
 			"seller_id":             seller_id,
 			"seller_name":           seller_name,
 			"seller_inn":            seller_inn,
@@ -365,6 +569,9 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo) (orders []
 			"consignee_name":        consignee_name,
 			"on_order_coupon":       on_order_coupon,
 			"on_order_coupon_fixed": on_order_coupon_fixed,
+			"shipped_date":          values[22],
+			"delivered_date":        values[23],
+			"accepted_date":         values[24],
 		}
 		orders = append(orders, entry)
 	}
@@ -389,7 +596,8 @@ func (db *DBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int
 			oi.coupon_percent, 
 			oi.coupon_fixed, 
 			oi.coupon_value, 
-			oi.comment 
+			oi.comment,
+			round((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2) AS sum
 		FROM order_orderitem oi
 			JOIN order_order oo ON (oi.order_id = oo.id)
 			JOIN product_modification pm ON (oi.modification_id = pm.id)
@@ -434,9 +642,14 @@ func (db *DBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int
 			s.AssignTo(&coupon_value)
 		}
 		comment := toString(values[10])
+		var sum float64
+		if values[11] != nil {
+			s := values[11].(pgtype.Numeric)
+			s.AssignTo(&sum)
+		}
 
 		entry := map[string]interface{}{
-			"id":             id,
+			"product_id":     id,
 			"name":           name,
 			"code":           code,
 			"warehouse":      warehouse,
@@ -447,6 +660,7 @@ func (db *DBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int
 			"coupon_fixed":   coupon_fixed,
 			"coupon_value":   coupon_value,
 			"comment":        comment,
+			"sum":            sum,
 		}
 		orderDetails = append(orderDetails, entry)
 	}

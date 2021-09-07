@@ -104,6 +104,14 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
+	if !udi.is_superuser && !udi.is_staff && udi.contractor_id != 2 {
+		// not severstal
+		err = fmt.Errorf("User %v (contractor %v) attempted to use crutch", ui.Id, udi.contractor_id)
+		log.Error(err)
+		http.Error(w, "", http.StatusForbidden)
+		return err
+	}
+
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
 	ui.Admin = udi.is_superuser

@@ -7,23 +7,30 @@
 	<form class="form-horizontal" @submit.prevent>
 		<div class="d-flex flex-wrap m-1 mb-2">
 			<div class="form-inline font-weight-bold mb-1">
-				{{totalOrders}} {{declOfNum(totalOrders, ["заказ", "заказа", "заказов"])}} на {{totalSum}} руб
+				<span v-if="totalSellers>0">
+					{{totalSellers}} {{declOfNum(totalSellers, ["поставщик", "поставщика", "поставщиков"])}}
+				</span>
+				<span v-if="totalSellers>0 && totalBuyers>0">
+					,&nbsp;
+				</span>
+				<span v-if="totalBuyers>0">
+					{{totalBuyers}} {{declOfNum(totalBuyers, ["покупатель", "покупателя", "покупателей"])}}
+				</span>
 			</div>
 			<div class="form-inline flex-grow-1 mx-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
 			<div class="d-flex form-inline py-0 m-0" style="min-width: 120px;height:2.5rem">
-				<VueMultiselect v-model="filter.selectedStatuses" 
-					:options="statuses" 
-					:multiple="true" 
+				<VueMultiselect v-model="filter.role" 
+					:options="roles" 
+					:multiple="false" 
 					:searchable="false" 
 					track-by="id"
 					label="name"
-					:close-on-select="false" 
+					:close-on-select="true" 
 					:show-labels="false"
 					@update:model-value="onChange"
-					placeholder="Статус">
-				<template v-slot:selection="{ values, isOpen }"><span class="multiselect__single" v-if="values.length > 0 || isOpen">{{ values.length }} {{declOfNum(values.length, ["статус", "статуса", "статусов"])}} {{declOfNum(values.length, ["выбран", "выбрано", "выбрано"])}}</span></template>
+					placeholder="Роль">
 				</VueMultiselect>
 			</div>
 			<div class="form-inline mx-1">
@@ -63,74 +70,72 @@
 		<table id="ordersTable" class="table table-sm m-1 text-xsmall" ref="ordersTable">
 			<thead class="thead-dark text-truncate">
 				<tr class="d-flex text-wrap text-break">
-					<th class="col-1 text-left">
-							#
-					</th>
-					<th class="col-6 text-left">
+					<th class="col-4 text-left">
 						<tr class="d-flex table-borderless m-0 p-0">
-							<td class="col-3 text-left m-0 p-0">Закупщик</td>
-							<td class="col-3 text-left m-0 p-0">Покупатель</td>
-							<td class="col-3 text-left m-0 p-0">Грузополучатель</td>
-							<td class="col-3 text-left m-0 p-0">Поставщик</td>
+							<td class="col-1 text-left m-0 p-0"> # </td>
+							<td class="col-5 text-left m-0 p-0">Название</td>
+							<td class="col-3 text-left m-0 p-0">ИНН</td>
+							<td class="col-3 text-left m-0 p-0">КПП</td>
 						</tr>
 					</th>
-					<th class="col-1">Cумма</th>
-					<th class="col-1">Статус</th>
+					<th class="col-3 text-left">Адрес</th>
+					<th class="col-1">Роль</th>
+					<th class="col-1" role="button" @click="switchSorting('user_count')">
+						<div class="d-flex flex-row">
+							<div>Пользователей</div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+						</div>
+					</th>
 					<th class="col-3 text-left">
 						<tr class="d-flex table-borderless m-0 p-0">
-							<td class="col-3 m-0 p-0">Создан</td>
-							<td class="col-3 m-0 p-0">Согласован</td>
-							<td class="col-3 m-0 p-0">Дата поставки</td>
-							<td class="col-3 m-0 p-0">Доставлен</td>
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('date_joined')">
+								<div class="d-flex flex-row">
+									<div>Присоединился</div>
+									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('last_login')">
+								<div class="d-flex flex-row">
+									<div>Появлялся</div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('order_count')">
+								<div class="d-flex flex-row">
+									<div>Заказов</div>
+									<div v-if="(sortingColumn==='order_count' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='order_count' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
 						</tr>
 					</th>
 				</tr>
 			</thead>
 			<tbody v-if="!loading"> 
-				<div v-for="(order, index) in orders" :key="index">
-					<tr data-toggle="collapse" role="button" :data-target="'#order' + index" class="accordion-toggle d-flex text-wrap text-break" @click="toggleDetails" :id="order.id">
-						<td class="col-1 text-left">
-								{{order.id}} {{order.contractor_number}}
-						</td>
-						<td class="col-6 text-left" :id="order.id">
-							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
-								<td class="col-3 text-left m-0 p-0">{{order.buyer}}</td>
-								<td class="col-3 text-left m-0 p-0">{{order.customer_name}}</td>
-								<td class="col-3 text-left m-0 p-0">{{order.consignee_name}}</td>
-								<td class="col-3 text-left m-0 p-0">{{order.seller_name}}</td>
+				<div v-for="(cp, index) in counterparts" :key="index">
+					<tr class="d-flex text-wrap text-break" :id="cp.id">
+						<td class="col-4 text-left" :id="cp.id">
+							<tr class="d-flex table-borderless m-0 p-0" :id="cp.id">
+								<td class="col-1 text-left m-0 p-0"> {{cp.id}} </td>
+								<td class="col-5 text-left m-0 p-0">{{cp.name}}</td>
+								<td class="col-3 text-left m-0 p-0">{{cp.inn}}</td>
+								<td class="col-3 text-left m-0 p-0">{{cp.kpp}}</td>
 							</tr>
 						</td>
-						<td class="col-1">{{order.sum}}</td>
-						<td class="col-1">{{order.status}}</td>
-						<td class="col-3 text-left" :id="order.id">
-							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
-								<td class="col-3 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDate(order.closed_date)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
+						<td class="col-3">{{cp.address}}</td>
+						<td class="col-1">{{cp.role}}</td>
+						<td class="col-1">{{cp.user_count}}</td>
+						<td class="col-3 text-left" :id="cp.id">
+							<tr class="d-flex table-borderless m-0 p-0" :id="cp.id">
+								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.date_joined)}}</td>
+								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.last_login)}}</td>
+								<td class="col-4 m-0 p-0">{{cp.order_count}}</td>
 							</tr>
 						</td>
 					</tr>
-					<div class="accordian-body collapse" :id="'order' + index"> 
-						<th class="d-flex text-wrap text-break table-borderless">
-							<td class="col-1"></td>
-							<td class="col-3 text-left">Товар</td>
-							<td class="col-1">Количество</td>
-							<td class="col-2">Цена (без НДС)</td>
-							<td class="col-1">НДС</td>
-							<td class="col-2 text-left">Комментарий</td>
-							<td class="col-1">Склад</td>
-						</th>
-						<tr class="d-flex text-wrap text-break table-borderless small" v-for="(oi, index) in order_details[order.id]" :key="index">
-							<td class="col-1"></td>
-							<td class="col-3 text-left">{{oi.name}}</td>
-							<td class="col-1">{{oi.count}}</td>
-							<td class="col-2">{{oi.price}}</td>
-							<td class="col-1">{{oi.nds}}</td>
-							<td class="col-2 text-left">{{oi.comment}}</td>
-							<td class="col-1">{{oi.warehouse}}</td>
-						</tr>
-					</div> 
 				</div>
 			</tbody>
 		</table>
@@ -170,38 +175,29 @@ export default {
 			loading:true,
 			gettingExcel:false,
 			error_message:"",
-			orders:[],
-			order_details:{},
+			counterparts:[],
+			sortingColumn:"",
+			sortingDirection:"",
 			filter: {
         start: new Date(2021, 0, 1),
         end: new Date(),
-				selectedStatuses: null,
+				role: null,
 				text: "",
       },
 			filterNormalized: {},
-			statuses: [
-				{name:'Создан', id: "1"}, 
-				{name:'В обработке', id: "2"}, 
-				{name:'На согласовании', id: "3"}, 
-				{name:'На сборке', id: "10"}, 
-				{name:'В пути', id: "21"}, 
-				{name:'Доставлен', id: "15"}, 
-				{name:'Приёмка', id: "20"}, 
-				{name:'Принят', id: "22"}, 
-				{name:'Ожидает оплаты', id: "23"}, 
-				{name:'Оплачен', id: "25"}, 
-				{name:'Завершён', id: "24"}, 
-				{name:'Предзаказ', id: "26"}, 
-				{name:'Отказ/Не согласован', id: "4"}, 
+			roles: [
+				{name:'Все', id: "0"}, 
+				{name:'Покупатель', id: "79"}, 
+				{name:'Поставщик', id: "186"}, 
 			],
 		} 
 	},
 	computed: {
-    totalOrders: function() {
-      return this.orders.length
+    totalSellers: function() {
+			return this.counterparts.filter(c => c.type_id === 186).length
     },
-    totalSum: function() {
-      return Math.round(this.orders.reduce(function(a, c){return a + Number((c.sum) || 0)}, 0)*100)/100
+    totalBuyers: function() {
+			return this.counterparts.filter(c => c.type_id === 79).length
     },
 		filterStart: {
 			get() {
@@ -223,9 +219,41 @@ export default {
   },
 	created() {
 		window.onpopstate = this.onPopState
-		setTimeout(this.getOrders, 200)
+		setTimeout(this.getCounterparts, 200)
 	},
   methods: {
+		sortingEnabled() {
+			return this.sortingDirection === 'up' || this.sortingDirection === 'down'
+		},
+		switchSorting(column) {
+			if (this.sortingColumn != column) {
+				this.sortingColumn = column
+				this.sortingDirection = "up"
+			} else {
+
+				if (this.sortingDirection == "up") {
+					this.sortingDirection = "down"
+				}
+				else if (this.sortingDirection == "down") {
+					this.sortingDirection = ""
+				}
+				else {
+					this.sortingDirection = "up"
+				}
+			}
+			this.sortResults()
+		},
+		sortResults() {
+			if (this.sortingDirection == "down") {
+				this.counterparts.sort((b, a) => (a[this.sortingColumn] > b[this.sortingColumn]) ? 1 : ((b[this.sortingColumn] > a[this.sortingColumn]) ? -1 : 0))
+			}
+			else if (this.sortingDirection == "up") {
+				this.counterparts.sort((a, b) => (a[this.sortingColumn] > b[this.sortingColumn]) ? 1 : ((b[this.sortingColumn] > a[this.sortingColumn]) ? -1 : 0))
+			}
+			else {
+				this.counterparts.sort((a, b) => (a.id > b.id) ? 1 : ((b.id > a.id) ? -1 : 0))
+			}
+		},
 		formatDateOnly(d) {
 			if(d != null)
 				return moment(d).format('YYYY-MM-DD')
@@ -244,18 +272,18 @@ export default {
 		onPopState(e) {
 			if(e.state != null) {
 				this.filter = e.state
-				return this.getOrders()
+				return this.getCounterparts()
 			}
 		},
 		onChange() {
 
-			history.pushState( JSON.parse(JSON.stringify(this.filter)), this.getFilterText(), "/" + process.env.VUE_APP_BASE_URL + "/orders?" + this.getFilterText())  
-			return this.getOrders()
+			history.pushState( JSON.parse(JSON.stringify(this.filter)), this.getFilterText(), "/" + process.env.VUE_APP_BASE_URL + "/counterparts?" + this.getFilterText())  
+			return this.getCounterparts()
 		},
-		getOrders() {
+		getCounterparts() {
 			this.filterNormalized = Object.assign({}, this.filter)
-			if (this.filter.selectedStatuses != null) 
-				this.filterNormalized.selectedStatuses =  this.filter.selectedStatuses.map(value => value.id)
+			if (this.filter.role != null) 
+				this.filterNormalized.role =  this.filter.role.id
 			if (! (this.filter.start instanceof Date) || isNaN(this.filter.start)) 
 				this.filterNormalized.start = null
 			if (! (this.filter.end instanceof Date) || isNaN(this.filter.end)) 
@@ -263,17 +291,19 @@ export default {
 
 			return axios({
 				method: "GET", 
-				url: "/methods/orders",
+				url: "/methods/counterparts",
 				params: this.filterNormalized,
 			})      
 			.then(res => {
 				this.error_message = ""
-				this.orders = res.data.orders
+				this.counterparts = res.data.counterparts
+				if (this.sortingEnabled())
+					this.sortResults()
 				this.loading = false
 			})
 			.catch(error => {
 				this.error_message = "Не удалось загрузить список заказов: " + this.getAxiosErrorMessage(error)
-				this.orders = []
+				this.counterparts = []
 				this.loading = false
 			})
 		},
@@ -282,7 +312,7 @@ export default {
 
 			axios({
 				method: "GET",
-				url: "/methods/orders/excel", 
+				url: "/methods/counterparts/excel", 
 				responseType: "blob", 
 				params: this.filterNormalized,
 			}).then(res => {
@@ -290,14 +320,14 @@ export default {
 				const url = URL.createObjectURL(blob)
 				const link = document.createElement('a')
 				link.href = url;
-				link.download = 'заказы.xlsx'
+				link.download = 'контрагенты.xlsx'
 				link.click();
 				link.remove();
 				URL.revokeObjectURL(link.href)
 				this.gettingExcel = false
 			}).catch(error => {
 				this.gettingExcel = false
-				this.error_message = "Не удалось загрузить excel со списком заказов: " + this.getAxiosErrorMessage(error)
+				this.error_message = "Не удалось загрузить excel со списком контрагентов: " + this.getAxiosErrorMessage(error)
 			})
 		},
 		today() {
@@ -337,24 +367,6 @@ export default {
 			if (n1 > 1 && n1 < 5) { return text_forms[1]; }
 			if (n1 == 1) { return text_forms[0]; }
 			return text_forms[2];
-		},
-		toggleDetails (entry) {
-			let order_id = entry.target.parentElement.id
-			if (!(order_id in this.order_details)) {
-				axios({
-					method: "GET", 
-					url: "/methods/order/"+order_id,
-				})      
-				.then(res => {
-					this.error_message = ""
-					this.order_details[order_id] = res.data
-					this.loading = false
-				})
-				.catch(error => {
-					this.error_message = "Не удалось загрузить детали заказа: " + this.getAxiosErrorMessage(error)
-					this.loading = false
-				})
-			}
 		},
 		getInDevMode : function(value) {
 			if(process.env.NODE_ENV === 'development') {

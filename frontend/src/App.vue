@@ -9,6 +9,7 @@
 			<ul class="navbar-nav">
 				<li class="nav-item"><router-link class="nav-link" to="/">Поиск товаров</router-link></li>
 				<li class="nav-item"><router-link class="nav-link" to="/orders">Заказы</router-link></li>
+				<li v-if="user.admin" class="nav-item"><router-link class="nav-link" to="/counterparts">Контрагенты</router-link></li>
 			</ul>
 			<ul class="navbar-nav ml-auto">
 				<li class="nav-item"><hr class="border-top"></li>
@@ -59,7 +60,10 @@ export default {
 	setup() {
 
 			let error_message = ref("")
-			let user = ref({}) 
+			let user = ref({
+				cities : [],
+				admin : false
+			}) 
 
       axios({
 				method: "GET", 
@@ -70,12 +74,13 @@ export default {
       })
       .catch(error => {
 				console.log(error.response);
+
         error_message.value = "Ошибка во время проверки сессии. " + error.response.data
 				
 				if (error.response.status == 401) {
-					window.setTimeout(function(){
-							window.location.href = "/login";
-						}, 5000);
+					window.location.href = "/login";
+				} else if (error.response.status == 403) {
+					window.location.href = "/";
 				}
 			})
 			return { error_message, user }

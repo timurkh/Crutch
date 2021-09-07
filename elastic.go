@@ -16,14 +16,16 @@ type ElasticHelper struct {
 }
 
 type SearchQuery struct {
-	Page     int    `json:"page"`
-	Text     string `json:"text"`
-	Category string `json:"category"`
-	Code     string `json:"code"`
-	Name     string `json:"name"`
-	Property string `json:"property"`
-	CityID   int    `json:"cityId"`
-	Operator string `json:"operator"`
+	Page        int    `json:"page"`
+	Text        string `json:"text"`
+	Category    string `json:"category"`
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Property    string `json:"property"`
+	CityID      int    `json:"cityId"`
+	Operator    string `json:"operator"`
+	InStockOnly bool   `json:"inStock"`
+	Supplier    string `json:"supplier"`
 }
 
 func initElasticHelper(addr string) (*ElasticHelper, error) {
@@ -54,27 +56,24 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	if operator == "" {
 		operator = "AND"
 	}
-	mustRequirements := make([]interface{}, 0)
-
-	if len(query.Text) > 2 {
-		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"simple_query_string": map[string]interface{}{
-				"query":            query.Text,
-				"default_operator": operator,
-				"analyzer":         "russian",
-				"fields": []interface{}{
-					"code^3",
-					"category^5",
-					"name^2",
-					"properties",
-					"description",
-				},
+	mustRequirement := map[string]interface{}{
+		"simple_query_string": map[string]interface{}{
+			"query":            query.Text,
+			"default_operator": operator,
+			"analyzer":         "russian",
+			"fields": []interface{}{
+				"code^3",
+				"category^5",
+				"name^2",
+				"properties",
+				"description",
 			},
-		})
+		},
 	}
 
+	filterRequirements := make([]interface{}, 0)
 	if len(query.Category) > 2 {
-		mustRequirements = append(mustRequirements, map[string]interface{}{
+		filterRequirements = append(filterRequirements, map[string]interface{}{
 			"wildcard": map[string]interface{}{
 				"category.name": strings.ToLower(query.Category) + "*",
 			},
@@ -83,33 +82,27 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	}
 
 	if len(query.Code) > 2 {
-		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"match": map[string]interface{}{
-				"code": map[string]interface{}{
-					"query":    query.Code,
-					"operator": "AND",
-				},
+		filterRequirements = append(filterRequirements, map[string]interface{}{
+			"wildcard": map[string]interface{}{
+				"code": "*" + strings.ToLower(query.Code) + "*",
 			},
 		},
 		)
 	}
 
 	if len(query.Name) > 2 {
-		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"match": map[string]interface{}{
-				"name": map[string]interface{}{
-					"query":    query.Name,
-					"operator": "AND",
-				},
+		filterRequirements = append(filterRequirements, map[string]interface{}{
+			"wildcard": map[string]interface{}{
+				"name": strings.ToLower(query.Name) + "*",
 			},
 		},
 		)
 	}
 
 	if len(query.Property) > 2 {
-		mustRequirements = append(mustRequirements, map[string]interface{}{
-			"wildcard": map[string]interface{}{
-				"properties.value": strings.ToLower(query.Property) + "*",
+		filterRequirements = append(filterRequirements, map[string]interface{}{
+			"match": map[string]interface{}{
+				"properties.value": query.Property,
 			},
 		},
 		)
@@ -119,7 +112,8 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	q := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
-				"must": mustRequirements,
+				"must":   mustRequirement,
+				"filter": filterRequirements,
 			},
 		},
 		"size": strconv.Itoa(itemsPerPage),
