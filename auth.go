@@ -13,11 +13,15 @@ import (
 )
 
 type UserInfo struct {
-	Id            int    `json:"id"`
-	Name          string `json:"name"`
-	Email         string `json:"email"`
-	Admin         bool   `json:"admin"`
-	CanReadOrders bool   `json:can_read_orders"`
+	Id             int    `json:"id"`
+	Name           string `json:"name"`
+	Email          string `json:"email"`
+	Admin          bool   `json:"admin"`
+	Staff          bool   `json:"staff"`
+	CompanyAdmin   bool   `json:company-admin"`
+	CanReadOrders  bool   `json:"can_read_orders"`
+	CanReadBuyers  bool   `json:"can_read_buyers"`
+	CanReadSellers bool   `json:"can_read_sellers"`
 }
 
 type City struct {
@@ -115,7 +119,11 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
 	ui.Admin = udi.is_superuser
+	ui.Staff = udi.is_staff
+	ui.CompanyAdmin = udi.is_company_admin
 	ui.CanReadOrders = udi.can_read_orders
+	ui.CanReadBuyers = udi.can_read_buyers
+	ui.CanReadSellers = udi.can_read_sellers
 
 	if !udi.is_superuser && !udi.verified {
 		err = fmt.Errorf("User %s (%s) is not verified yet", ui.Name, ui.Email)
@@ -129,7 +137,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
-	log.Info("User ", ui)
+	log.Info("User ", fmt.Sprintf("%+v", ui))
 
 	gorilla_context.Set(r, "UserInfo", ui)
 

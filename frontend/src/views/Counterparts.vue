@@ -20,6 +20,12 @@
 			<div class="form-inline flex-grow-1 mx-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
+			<div class="form-inline mx-1 p-0">
+				<input class="form-control" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
+				<label class="form-check-label mx-1" for="haveOrders">
+					Есть заказы
+				</label>
+			</div>
 			<div class="d-flex form-inline py-0 m-0" style="min-width: 120px;height:2.5rem">
 				<VueMultiselect v-model="filter.role" 
 					:options="roles" 
@@ -35,7 +41,7 @@
 			</div>
 			<div class="form-inline mx-1">
 				<div class="d-flex justify-center items-center">
-					<label for="filterStart" class="mx-1">Заказы созданы с</label> 
+					<label for="filterStart" class="mx-1">Заказы с</label> 
 					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange"/>
 					<label for="filterEnd" class="mx-1">по</label> 
 					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange"/>
@@ -194,10 +200,10 @@ export default {
 	},
 	computed: {
     totalSellers: function() {
-			return this.counterparts.filter(c => c.type_id === 186).length
+			return this.counterparts.filter(c => c.role_id === 186).length
     },
     totalBuyers: function() {
-			return this.counterparts.filter(c => c.type_id === 79).length
+			return this.counterparts.filter(c => c.role_id === 79).length
     },
 		filterStart: {
 			get() {
@@ -219,6 +225,12 @@ export default {
   },
 	created() {
 		window.onpopstate = this.onPopState
+		if(!this.user.admin) {
+			if(!this.user.can_read_buyers)
+				this.roles[1].$isDisabled = true
+			if(!this.user.can_read_sellers)
+				this.roles[2].$isDisabled = true
+		}
 		setTimeout(this.getCounterparts, 200)
 	},
   methods: {

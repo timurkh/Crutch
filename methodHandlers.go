@@ -227,14 +227,14 @@ func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.
 
 	userInfo := mh.auth.getUserInfo(r)
 
-	if !userInfo.Admin {
-		http.Error(w, "This resource requires admin privileges", http.StatusUnauthorized)
+	if !userInfo.Admin && !userInfo.Staff {
+		http.Error(w, "Inssuficient privileges", http.StatusUnauthorized)
 		return err
 	}
 
 	log.Info("Getting list of counterparts, filter ", filter)
 
-	counterparts, err := mh.db.getCounterparts(r.Context(), filter)
+	counterparts, err := mh.db.getCounterparts(r.Context(), userInfo, filter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -256,6 +256,164 @@ func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.
 	return nil
 }
 
+func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *http.Request) error {
+
+	var filter CounterpartsFilter
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	err := decoder.Decode(&filter, r.URL.Query())
+	if err != nil {
+		err = fmt.Errorf("Failed to decode filter: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	if !userInfo.Admin {
+		http.Error(w, "This resource requires admin privileges", http.StatusUnauthorized)
+		return err
+	}
+
+	log.Info("Getting list of counterparts, filter ", filter)
+
+	counterparts, err := mh.db.getCounterparts(r.Context(), userInfo, filter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	file, err := os.CreateTemp("/tmp", "*.xlsx")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	defer os.Remove(file.Name())
+
+	xls := excelize.NewFile()
+	streamWriter, err := xls.NewStreamWriter("Sheet1")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	streamWriter.MergeCell("A1", "T1")
+	streamWriter.SetRow("U1", []interface{}{
+		excelize.Cell{Value: "Поставщик"},
+	})
+
+	streamWriter.MergeCell("U1", "Y1")
+	streamWriter.SetRow("Z1", []interface{}{
+		excelize.Cell{Value: "Администратор"},
+	})
+
+	streamWriter.MergeCell("Z1", "AB1")
+
+	streamWriter.SetRow("A2", []interface{}{
+		excelize.Cell{Value: "#"},
+		excelize.Cell{Value: "Название компании"},
+		excelize.Cell{Value: "Роль"},
+		excelize.Cell{Value: "ИНН"},
+		excelize.Cell{Value: "КПП"},
+		excelize.Cell{Value: "ОГРН"},
+		excelize.Cell{Value: "Юридический адрес"},
+		excelize.Cell{Value: "Фактический адрес"},
+		excelize.Cell{Value: "Директор"},
+		excelize.Cell{Value: "Контактное лицо"},
+		excelize.Cell{Value: "Телефон"},
+		excelize.Cell{Value: "Банк"},
+		excelize.Cell{Value: "БИК"},
+		excelize.Cell{Value: "Корр. счёт"},
+		excelize.Cell{Value: "Рассчётный счёт"},
+		excelize.Cell{Value: "Дополнительные поля"},
+		excelize.Cell{Value: "Телефон банка"},
+		excelize.Cell{Value: "Счёт"},
+		excelize.Cell{Value: "IBAN"},
+		excelize.Cell{Value: "SWIFT"},
+		excelize.Cell{Value: "Страна"},
+		excelize.Cell{Value: "Город"},
+		excelize.Cell{Value: "E-mail"},
+		excelize.Cell{Value: "Сайт"},
+		excelize.Cell{Value: "Телефон"},
+		excelize.Cell{Value: "Имя"},
+		excelize.Cell{Value: "Телефон"},
+		excelize.Cell{Value: "E-Mail"},
+	})
+
+	row := 3
+	for _, cp := range counterparts {
+
+		streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
+			excelize.Cell{Value: cp["id"]},
+			excelize.Cell{Value: cp["name"]},
+			excelize.Cell{Value: cp["role"]},
+			excelize.Cell{Value: cp["inn"]},
+			excelize.Cell{Value: cp["kpp"]},
+			excelize.Cell{Value: cp["ogrn"]},
+			excelize.Cell{Value: cp["address"]},
+			excelize.Cell{Value: cp["actual_address"]},
+			excelize.Cell{Value: cp["director_name"]},
+			excelize.Cell{Value: cp["contact_name"]},
+			excelize.Cell{Value: cp["phone"]},
+			excelize.Cell{Value: cp["bank"]},
+			excelize.Cell{Value: cp["bik"]},
+			excelize.Cell{Value: cp["corr_account"]},
+			excelize.Cell{Value: cp["pay_account"]},
+			excelize.Cell{Value: cp["extra_data"]},
+			excelize.Cell{Value: cp["bank_phone"]},
+			excelize.Cell{Value: cp["account"]},
+			excelize.Cell{Value: cp["IBAN"]},
+			excelize.Cell{Value: cp["SWIFT"]},
+			excelize.Cell{Value: cp["country"]},
+			excelize.Cell{Value: cp["city"]},
+			excelize.Cell{Value: cp["seller_email"]},
+			excelize.Cell{Value: cp["seller_site"]},
+			excelize.Cell{Value: cp["seller_phone"]},
+		})
+
+		if cp["admins"] != nil {
+			admins := cp["admins"].(map[string]interface{})
+			rowStart := row
+			for _, a := range admins {
+				admin := a.(map[string]interface{})
+
+				streamWriter.SetRow(fmt.Sprintf("Z%v", row), []interface{}{
+					excelize.Cell{Value: toString(admin["name"])},
+					excelize.Cell{Value: toString(admin["phone"])},
+					excelize.Cell{Value: toString(admin["email"])},
+				})
+				row++
+			}
+
+			adminsLen := len(admins)
+
+			if adminsLen > 1 {
+
+				for col := 'A'; col <= 'Y'; col++ {
+					streamWriter.MergeCell(fmt.Sprintf("%c%v", col, rowStart), fmt.Sprintf("%c%v", col, row-1))
+				}
+			}
+		} else {
+
+			row++
+		}
+
+	}
+
+	err = streamWriter.Flush()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	xls.SaveAs(file.Name())
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFile(w, r, file.Name())
+
+	return nil
+}
 func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
 
 	var ordersFilter OrdersFilter

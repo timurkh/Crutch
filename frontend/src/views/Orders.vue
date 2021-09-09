@@ -28,7 +28,7 @@
 			</div>
 			<div class="form-inline mx-1">
 				<div class="d-flex justify-center items-center">
-					<label for="filterStart" class="mx-1">Заказы созданы с</label> 
+					<label for="filterStart" class="mx-1">Заказы с</label> 
 					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange"/>
 					<label for="filterEnd" class="mx-1">по</label> 
 					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange"/>

@@ -13,10 +13,11 @@ import (
 )
 
 type CounterpartsFilter struct {
-	Start time.Time `schema:"start"`
-	End   time.Time `schema:"end"`
-	Text  string    `schema:"text"`
-	Role  int       `schema:"role"`
+	Start      time.Time `schema:"start"`
+	End        time.Time `schema:"end"`
+	Text       string    `schema:"text"`
+	Role       int       `schema:"role"`
+	HaveOrders bool      `schema:"haveOrders"`
 }
 
 type OrdersFilter struct {
@@ -49,15 +50,18 @@ func initDBHelper(host string, user string, password string, database string) (*
 }
 
 type UserDBInfo struct {
-	first_name      string
-	last_name       string
-	email           string
-	is_superuser    bool
-	is_staff        bool
-	can_read_orders bool
-	verified        bool
-	blocked         bool
-	contractor_id   int
+	first_name       string
+	last_name        string
+	email            string
+	is_superuser     bool
+	is_staff         bool
+	is_company_admin bool
+	can_read_orders  bool
+	can_read_buyers  bool
+	can_read_sellers bool
+	verified         bool
+	blocked          bool
+	contractor_id    int
 }
 
 func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
@@ -68,21 +72,20 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 			email, 
 			is_superuser, 
 			is_staff,
-			COALESCE( staff_can_read_orders, FALSE) staff_can_read_orders,
+			company_admin,
+			COALESCE( can_read_orders, FALSE) can_read_orders,
+			COALESCE( can_read_buyers, FALSE) can_read_buyers,
+			COALESCE( can_read_sellers, FALSE) can_read_sellers,
 			verified, 
 			blocked,
 			COALESCE( contractor_id, 0) contractor_id
 		FROM 
 			core_user cu 
-			LEFT JOIN (
-				SELECT 
-					user_id, 
-					TRUE as staff_can_read_orders 
-				FROM core_user_user_permissions up 
-				WHERE permission_id=1067) ro 
-			ON (ro.user_id=cu.id AND cu.is_staff) 
+			LEFT JOIN (SELECT user_id, TRUE as can_read_orders FROM core_user_user_permissions up WHERE permission_id=1067) ro ON (ro.user_id=cu.id AND cu.is_staff) 
+			LEFT JOIN (SELECT user_id, TRUE as can_read_buyers FROM core_user_user_permissions up WHERE permission_id=286) rb ON (rb.user_id=cu.id AND cu.is_staff) 
+			LEFT JOIN (SELECT user_id, TRUE as can_read_sellers FROM core_user_user_permissions up WHERE permission_id=678) rs ON (rs.user_id=cu.id AND cu.is_staff) 
 			LEFT JOIN core_user_contractors cuc ON cu.id = cuc.user_id
-		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.can_read_orders, &ui.verified, &ui.blocked, &ui.contractor_id)
+		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.is_company_admin, &ui.can_read_orders, &ui.can_read_buyers, &ui.can_read_sellers, &ui.verified, &ui.blocked, &ui.contractor_id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve user info: %v", err)
 	}
@@ -290,21 +293,27 @@ func toTime(v interface{}) string {
 
 func (db *DBHelper) ordersAccessRightsFilter(userInfo UserInfo, args []interface{}) (string, []interface{}) {
 	filterUsers := ""
-	if !userInfo.Admin && !userInfo.CanReadOrders {
+	if !userInfo.Admin && !(userInfo.Staff && userInfo.CanReadOrders) {
+
 		args = append(args, userInfo.Id)
+		if userInfo.CompanyAdmin {
+			filterUsers = ` AND oo.contractor_id in (
+				SELECT contractor_id FROM core_user_contractors 
+				WHERE user_id=$`
+		} else {
 
-		filterUsers = ` AND oo.user_id in (
-		SELECT ou.id 
-		FROM core_user ou 
-			JOIN core_user cu ON (ou.lft <= cu.rght  AND ou.lft >= cu.lft  AND ou.tree_id = cu.tree_id) 
-		WHERE cu.id=$`
+			filterUsers = ` AND oo.user_id in (
+				SELECT ou.id 
+				FROM core_user ou 
+					JOIN core_user cu ON (ou.lft <= cu.rght  AND ou.lft >= cu.lft  AND ou.tree_id = cu.tree_id) 
+				WHERE cu.id=$`
+		}
 		filterUsers += strconv.Itoa(len(args)) + ")"
-
 	}
 	return filterUsers, args
 }
 
-func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilter) (counterparts []map[string]interface{}, err error) {
+func (db *DBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, filter CounterpartsFilter) (counterparts []map[string]interface{}, err error) {
 
 	args := make([]interface{}, 0)
 	dateFilter := ""
@@ -319,7 +328,7 @@ func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilt
 	query := `
 		SELECT * FROM (
 			SELECT 
-				id,
+				cc.id,
 				content_type_id AS role_id,
 				name, 
 				inn,
@@ -344,8 +353,31 @@ func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilt
 				CASE WHEN content_type_id=79 THEN contractor_order_count 
 					WHEN content_type_id=186 THEN supplier_order_count
 					ELSE NULL 
-				END AS order_count
-			FROM company_company 
+				END AS order_count,
+				ogrn,
+				actual_address,
+				director_name,
+				contact_name,
+				cc.phone,
+				bank,
+				bik,
+				corr_account,
+				pay_account,
+				extra_data,
+				bank_phone,
+				account,
+				"IBAN",
+				"SWIFT",
+				country,
+				city,
+				ss.email,
+				ss.site,
+				ss.phone,
+				CASE WHEN content_type_id=79 THEN contractor_admin
+					WHEN content_type_id=186 THEN supplier_admin
+					ELSE NULL
+				END AS admin
+			FROM company_company cc
 				LEFT JOIN (SELECT COUNT(*) supplier_user_count, MIN(date_joined) AS supplier_date_joined, MAX(last_login) AS supplier_last_login, supplier_id 
 					FROM core_user WHERE verified=TRUE AND blocked=FALSE GROUP BY supplier_id) cu 
 					ON (object_id = cu.supplier_id AND content_type_id=186) 
@@ -360,7 +392,29 @@ func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilt
 	query += dateFilter
 	query += ` GROUP BY contractor_id) co
 					ON (object_id = co.contractor_id AND content_type_id=79)
+				LEFT JOIN supplier_supplierprofile ss ON cc.object_id = ss.supplier_id and content_type_id=186
+				LEFT JOIN company_country ON company_country.id = ss.country_id
+				LEFT JOIN company_city ON company_city.id = ss.city_id
+				LEFT JOIN (SELECT u.supplier_id, json_object_agg (u.id, json_build_object('name', concat_ws(' ', first_name, middle_name, last_name), 'email', u.email, 'phone', u.phone)) AS supplier_admin 
+					FROM core_user u 
+					WHERE u.company_admin=TRUE GROUP BY u.supplier_id) cas 
+					ON (object_id = cas.supplier_id AND content_type_id=186)
+				LEFT JOIN (SELECT cc.contractor_id, json_object_agg(u.id, json_build_object('name', concat_ws(' ', first_name, middle_name, last_name), 'email', u.email, 'phone', u.phone)) AS contractor_admin 
+					FROM core_user u JOIN core_user_contractors cc ON u.id = cc.user_id 
+					WHERE u.company_admin=TRUE GROUP BY cc.contractor_id) cac 
+					ON (object_id = cac.contractor_id AND content_type_id=79)
 		)s WHERE user_count>0 `
+
+	if !userInfo.Admin {
+		query += " AND role_id IN (0"
+		if userInfo.CanReadBuyers {
+			query += ", 79"
+		}
+		if userInfo.CanReadSellers {
+			query += ", 186"
+		}
+		query += ")"
+	}
 
 	// filter by text
 	if filter.Text != "" {
@@ -371,6 +425,10 @@ func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilt
 		query += " OR kpp ILIKE $" + n
 		query += " OR address ILIKE $" + n
 		query += ")"
+	}
+
+	if filter.HaveOrders {
+		query += " AND order_count > 0"
 	}
 
 	if filter.Role > 0 {
@@ -391,18 +449,39 @@ func (db *DBHelper) getCounterparts(ctx context.Context, filter CounterpartsFilt
 		}
 
 		entry := map[string]interface{}{
-			"id":          values[0],
-			"type_id":     values[1],
-			"name":        values[2],
-			"inn":         values[3],
-			"kpp":         values[4],
-			"address":     values[5],
-			"role":        values[6],
-			"user_count":  values[7],
-			"date_joined": values[8],
-			"last_login":  values[9],
-			"order_count": values[10],
+			"id":             values[0],
+			"role_id":        values[1],
+			"name":           values[2],
+			"inn":            values[3],
+			"kpp":            values[4],
+			"address":        values[5],
+			"role":           values[6],
+			"user_count":     values[7],
+			"date_joined":    values[8],
+			"last_login":     values[9],
+			"order_count":    values[10],
+			"ogrn":           toString(values[11]),
+			"actual_address": values[12],
+			"director_name":  toString(values[13]),
+			"contact_name":   toString(values[14]),
+			"phone":          toString(values[15]),
+			"bank":           toString(values[16]),
+			"bik":            toString(values[17]),
+			"corr_account":   toString(values[18]),
+			"pay_account":    toString(values[19]),
+			"extra_data":     toString(values[20]),
+			"account":        toString(values[21]),
+			"bank_phone":     toString(values[22]),
+			"IBAN":           toString(values[23]),
+			"SWIFT":          toString(values[24]),
+			"country":        toString(values[25]),
+			"city":           toString(values[26]),
+			"seller_email":   toString(values[27]),
+			"seller_site":    toString(values[28]),
+			"seller_phone":   toString(values[29]),
+			"admins":         values[30],
 		}
+
 		counterparts = append(counterparts, entry)
 	}
 
