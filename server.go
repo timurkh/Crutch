@@ -72,6 +72,7 @@ func main() {
 	crutchAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 	crutchAPI.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
 	crutchAPI.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
+	crutchAPI.Methods("GET").Path("/orders/csv").Handler(appHandler(methods.getOrdersCSVHandler))
 	crutchAPI.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
 	crutchAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 

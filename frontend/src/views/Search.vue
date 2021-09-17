@@ -157,18 +157,18 @@ export default {
 	created() {
 		window.onpopstate = this.onPopState
 	},
-	mounted() {
-
-		this.$nextTick(function() {
-			window.addEventListener('scroll', this.onScroll)
-		});
-	},
 	watch : {
 		user : function(newVal){
 			if(!newVal.admin && (newVal.cities == null || newVal.cities.length == 0)) {
 				this.error_message = "У вашего аккаунта не задано ни одного склада на который можно доставить груз"
 			}
 		}
+	},
+	mounted() {
+
+		this.$nextTick(function() {
+			window.addEventListener('scroll', this.onScroll)
+		});
 	},
 	beforeUnmount() {
 		window.removeEventListener('scroll', this.onScroll)

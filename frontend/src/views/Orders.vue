@@ -86,7 +86,7 @@
 					</th>
 				</tr>
 			</thead>
-			<tbody v-if="!loading"> 
+			<tbody> 
 				<div v-for="(order, index) in orders" :key="index">
 					<tr data-toggle="collapse" role="button" :data-target="'#order' + index" class="accordion-toggle d-flex text-wrap text-break" @click="toggleDetails" :id="order.id">
 						<td class="col-1 text-left">
@@ -159,6 +159,12 @@
 			}
 	});
 	import VueMultiselect from 'vue-multiselect'
+function doubleRaf (callback) {
+	requestAnimationFrame(() => {
+		requestAnimationFrame(callback)
+	})
+}
+
 
 
 export default {
@@ -171,6 +177,8 @@ export default {
 			gettingExcel:false,
 			error_message:"",
 			orders:[],
+			totalOrders: 0,
+			totalSum: 0,
 			order_details:{},
 			filter: {
         start: new Date(2021, 0, 1),
@@ -194,15 +202,10 @@ export default {
 				{name:'Предзаказ', id: "26"}, 
 				{name:'Отказ/Не согласован', id: "4"}, 
 			],
+			moreAvailable: true,
 		} 
 	},
 	computed: {
-    totalOrders: function() {
-      return this.orders.length
-    },
-    totalSum: function() {
-      return Math.round(this.orders.reduce(function(a, c){return a + Number((c.sum) || 0)}, 0)*100)/100
-    },
 		filterStart: {
 			get() {
 				return moment(this.filter.start).format('YYYY-MM-DD')
@@ -225,6 +228,15 @@ export default {
 		window.onpopstate = this.onPopState
 		setTimeout(this.getOrders, 200)
 	},
+	mounted() {
+
+		this.$nextTick(function() {
+			window.addEventListener('scroll', this.onScroll)
+		});
+	},
+	beforeUnmount() {
+		window.removeEventListener('scroll', this.onScroll)
+	},  
   methods: {
 		formatDateOnly(d) {
 			if(d != null)
@@ -253,6 +265,7 @@ export default {
 			return this.getOrders()
 		},
 		getOrders() {
+			this.orders = []
 			this.filterNormalized = Object.assign({}, this.filter)
 			if (this.filter.selectedStatuses != null) 
 				this.filterNormalized.selectedStatuses =  this.filter.selectedStatuses.map(value => value.id)
@@ -260,7 +273,12 @@ export default {
 				this.filterNormalized.start = null
 			if (! (this.filter.end instanceof Date) || isNaN(this.filter.end)) 
 				this.filterNormalized.end = new Date()
+			this.filterNormalized.page = 0
+			this.filterNormalized.itemsPerPage = 20
 
+			return this.loadOrders()
+		},
+		loadOrders() {
 			return axios({
 				method: "GET", 
 				url: "/methods/orders",
@@ -268,14 +286,35 @@ export default {
 			})      
 			.then(res => {
 				this.error_message = ""
-				this.orders = res.data.orders
+				this.orders = this.orders.concat(res.data.orders)
+				this.moreAvailable = res.data.orders.length == this.filterNormalized.itemsPerPage
+				if('count' in  res.data)
+					this.totalOrders = res.data.count
+				if('sum' in res.data)
+					this.totalSum = res.data.sum
 				this.loading = false
+				this.$nextTick(doubleRaf(() => this.onScroll()))
 			})
 			.catch(error => {
 				this.error_message = "Не удалось загрузить список заказов: " + this.getAxiosErrorMessage(error)
 				this.orders = []
 				this.loading = false
 			})
+		},
+		loadMoreOrders() {
+      this.loading = true
+			this.filterNormalized.page ++
+
+			this.loadOrders()
+
+		},
+		onScroll : function () {
+			if (!this.loading && this.moreAvailable) {
+				let element = this.$refs.ordersTable
+				if ( element != null && element.getBoundingClientRect().bottom < window.innerHeight ) {
+					this.loadMoreOrders()
+				}
+			}
 		},
 		exportExcel() {
 			this.gettingExcel = true

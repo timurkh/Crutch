@@ -5,28 +5,14 @@
 
 
 	<form class="form-horizontal" @submit.prevent>
-		<div class="d-flex flex-wrap m-1 mb-2">
-			<div class="form-inline font-weight-bold mb-1">
-				<span v-if="totalSellers>0">
-					{{totalSellers}} {{declOfNum(totalSellers, ["поставщик", "поставщика", "поставщиков"])}}
-				</span>
-				<span v-if="totalSellers>0 && totalBuyers>0">
-					,&nbsp;
-				</span>
-				<span v-if="totalBuyers>0">
-					{{totalBuyers}} {{declOfNum(totalBuyers, ["покупатель", "покупателя", "покупателей"])}}
-				</span>
+		<div class="d-flex flex-nowrap m-1 mb-2">
+			<div class="form-inline font-weight-bold m-0 p-0">
+				{{summary}}
 			</div>
 			<div class="form-inline flex-grow-1 mx-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
-			<div class="form-inline mx-1 p-0">
-				<input class="form-control" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
-				<label class="form-check-label mx-1" for="haveOrders">
-					Есть заказы
-				</label>
-			</div>
-			<div class="d-flex form-inline py-0 m-0" style="min-width: 120px;height:2.5rem">
+			<div class="form-inline align-self-center py-0 m-0" style="min-width: 119px;height:2.5rem">
 				<VueMultiselect v-model="filter.role" 
 					:options="roles" 
 					:multiple="false" 
@@ -39,9 +25,15 @@
 					placeholder="Роль">
 				</VueMultiselect>
 			</div>
-			<div class="form-inline mx-1">
+			<div class="form-inline ml-1 p-0">
+				<input class="form-control" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
+				<label class="form-check-label mx-1" for="haveOrders">
+					Есть заказы
+				</label>
+			</div>
+			<div class="form-inline ml-0 mr-1">
 				<div class="d-flex justify-center items-center">
-					<label for="filterStart" class="mx-1">Заказы с</label> 
+					<label for="filterStart" class="mr-1 ml-0">с</label> 
 					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange"/>
 					<label for="filterEnd" class="mx-1">по</label> 
 					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange"/>
@@ -199,6 +191,24 @@ export default {
 		} 
 	},
 	computed: {
+		summary: function() {
+			var ret = ""
+			if(this.totalSellers > 0) {
+				ret += this.totalSellers
+				ret += " "
+				ret += this.declOfNum(this.totalSellers, ["поставщик", "поставщика", "поставщиков"])
+
+				if(this.totalBuers > 0)
+					ret += ", "
+			}
+			
+			if(this.totalBuers > 0) {
+				ret += this.totalBuyers
+				ret += " "
+				ret += this.declOfNum(this.totalBuyers, ["покупатель", "покупателя", "покупателей"])
+			}
+			return ret
+		},
     totalSellers: function() {
 			return this.counterparts.filter(c => c.role_id === 186).length
     },

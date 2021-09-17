@@ -228,6 +228,7 @@ func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.
 	userInfo := mh.auth.getUserInfo(r)
 
 	if !userInfo.Admin && !userInfo.Staff {
+		log.Error("Insufficient privileges to get list of counterparts")
 		http.Error(w, "Inssuficient privileges", http.StatusUnauthorized)
 		return err
 	}
@@ -270,7 +271,8 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 
 	userInfo := mh.auth.getUserInfo(r)
 
-	if !userInfo.Admin {
+	if !userInfo.Admin && !userInfo.Staff {
+		log.Error("Insufficient privileges to get excel with list of counterparts")
 		http.Error(w, "This resource requires admin privileges", http.StatusUnauthorized)
 		return err
 	}
@@ -439,9 +441,23 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	err = json.NewEncoder(w).Encode(struct {
-		Orders interface{} `json:"orders"`
-	}{orders})
+	if ordersFilter.Page == 0 {
+		count, sum, e := mh.db.getOrdersSum(r.Context(), userInfo, ordersFilter)
+		if e != nil {
+			http.Error(w, e.Error(), http.StatusInternalServerError)
+			return e
+		}
+		err = json.NewEncoder(w).Encode(struct {
+			Orders interface{} `json:"orders"`
+			Count  interface{} `json:"count"`
+			Sum    interface{} `json:"sum"`
+		}{orders, count, sum})
+
+	} else {
+		err = json.NewEncoder(w).Encode(struct {
+			Orders interface{} `json:"orders"`
+		}{orders})
+	}
 
 	if err != nil {
 		err = fmt.Errorf("Error while preparing json reponse: %v", err)
@@ -494,6 +510,8 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
+	ordersFilter.Page = 0
+	ordersFilter.ItemsPerPage = 0
 
 	file, err := os.CreateTemp("/tmp", "*.xlsx")
 	if err != nil {
@@ -510,6 +528,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	}
 
 	streamWriter.SetRow("A1", []interface{}{
+		excelize.Cell{},
 		excelize.Cell{Value: "[8]"},
 		excelize.Cell{},
 		excelize.Cell{},
@@ -536,6 +555,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		excelize.Cell{},
 		excelize.Cell{},
 		excelize.Cell{},
+		excelize.Cell{},
 		excelize.Cell{Value: "Статус заказа \"В пути\""},
 		excelize.Cell{},
 		excelize.Cell{Value: "Статус заказа \"Доставлен\""},
@@ -544,16 +564,17 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		excelize.Cell{},
 	})
 
-	streamWriter.MergeCell("A1", "B1")
-	streamWriter.MergeCell("G1", "H1")
-	streamWriter.MergeCell("I1", "J1")
-	streamWriter.MergeCell("O1", "P1")
-	streamWriter.MergeCell("Q1", "Y1")
-	streamWriter.MergeCell("AA1", "AB1")
+	streamWriter.MergeCell("B1", "C1")
+	streamWriter.MergeCell("H1", "I1")
+	streamWriter.MergeCell("J1", "K1")
+	streamWriter.MergeCell("P1", "Q1")
+	streamWriter.MergeCell("R1", "AA1")
 	streamWriter.MergeCell("AC1", "AD1")
 	streamWriter.MergeCell("AE1", "AF1")
+	streamWriter.MergeCell("AG1", "AH1")
 
 	streamWriter.SetRow("A2", []interface{}{
+		excelize.Cell{Value: "ID"},
 		excelize.Cell{Value: "Номер заказа"},
 		excelize.Cell{Value: "Дата заказа"},
 		excelize.Cell{Value: "Дата согласования"},
@@ -571,6 +592,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		excelize.Cell{Value: "ИНН покупателя"},
 		excelize.Cell{Value: "КПП покупателя"},
 		excelize.Cell{Value: "Код товара/работ, услуг"},
+		excelize.Cell{Value: "Артикул"},
 		excelize.Cell{Value: "Наименование товара"},
 		excelize.Cell{Value: "Единица обозначения - условное обозначение (национальное)"},
 		excelize.Cell{Value: "Количество (объём)"},
@@ -616,6 +638,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		tax := math.Floor(sum*nds) / 100
 
 		streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
+			excelize.Cell{Value: order["id"]},
 			excelize.Cell{Value: order["contractor_number"]},
 			excelize.Cell{Value: toDate(order["ordered_date"])},
 			excelize.Cell{Value: toDate(order["closed_date"])},
@@ -634,6 +657,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 			excelize.Cell{Value: order["customer_kpp"]},
 
 			excelize.Cell{Value: orderDetail["product_id"]},
+			excelize.Cell{Value: orderDetail["code"]},
 			excelize.Cell{Value: orderDetail["name"]},
 			excelize.Cell{Value: "Шт"},
 			excelize.Cell{Value: orderDetail["count"]},
@@ -661,8 +685,9 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 			nds := orderDetail["nds"].(float64)
 			tax := math.Floor(sum*nds) / 100
 
-			streamWriter.SetRow(fmt.Sprintf("Q%v", row), []interface{}{
+			streamWriter.SetRow(fmt.Sprintf("R%v", row), []interface{}{
 				excelize.Cell{Value: orderDetail["product_id"]},
+				excelize.Cell{Value: orderDetail["code"]},
 				excelize.Cell{Value: orderDetail["name"]},
 				excelize.Cell{Value: "Шт"},
 				excelize.Cell{Value: orderDetail["count"]},
@@ -678,7 +703,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 
 		if len(orderDetails) > 1 {
 
-			for col := 'A'; col <= 'P'; col++ {
+			for col := 'A'; col <= 'Q'; col++ {
 				err = streamWriter.MergeCell(fmt.Sprintf("%c%v", col, orderStartRow), fmt.Sprintf("%c%v", col, row-1))
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -686,7 +711,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 				}
 			}
 
-			for _, col := range []string{"Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG"} {
+			for _, col := range []string{"AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI"} {
 				err = streamWriter.MergeCell(fmt.Sprintf("%s%v", col, orderStartRow), fmt.Sprintf("%s%v", col, row-1))
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -705,6 +730,28 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	xls.SaveAs(file.Name())
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFile(w, r, file.Name())
+
+	return nil
+}
+
+func (mh *MethodHandlers) getOrdersCSVHandler(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	file, err := os.CreateTemp("/tmp", "*.csv")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	defer os.Remove(file.Name())
+
+	mh.db.getOrdersCSV(r.Context(), userInfo, file)
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.csv"))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, file.Name())
