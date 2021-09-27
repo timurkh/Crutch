@@ -81,13 +81,12 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 			COALESCE( can_read_sellers, FALSE) can_read_sellers,
 			verified, 
 			blocked,
-			COALESCE( contractor_id, 0) contractor_id
+			COALESCE( current_contractor_id, 0)
 		FROM 
 			core_user cu 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_orders FROM core_user_user_permissions up WHERE permission_id=1067) ro ON (ro.user_id=cu.id AND cu.is_staff) 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_buyers FROM core_user_user_permissions up WHERE permission_id=286) rb ON (rb.user_id=cu.id AND cu.is_staff) 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_sellers FROM core_user_user_permissions up WHERE permission_id=678) rs ON (rs.user_id=cu.id AND cu.is_staff) 
-			LEFT JOIN core_user_contractors cuc ON cu.id = cuc.user_id
 		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.is_company_admin, &ui.can_read_orders, &ui.can_read_buyers, &ui.can_read_sellers, &ui.verified, &ui.blocked, &ui.contractor_id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve user info: %v", err)
@@ -365,11 +364,11 @@ func (db *DBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, filt
 				LEFT JOIN (SELECT COUNT (*) contractor_user_count, MIN(date_joined) contractor_date_joined, MAX(last_login) contractor_last_login, contractor_id 
 					FROM core_user_contractors JOIN core_user cu ON (cu.id = user_id AND verified=TRUE and blocked=FALSE) GROUP BY contractor_id) cuc 
 					ON (object_id=cuc.contractor_id AND content_type_id=79)
-				LEFT JOIN (SELECT COUNT (*) supplier_order_count, supplier_id FROM order_order WHERE id NOT IN (1, 17) `
+				LEFT JOIN (SELECT COUNT (*) supplier_order_count, supplier_id FROM order_order WHERE id NOT IN (1, 17, 18) `
 	query += dateFilter
 	query += ` GROUP BY supplier_id) so
 					ON (object_id = so.supplier_id AND content_type_id=186)
-				LEFT JOIN (SELECT COUNT (*) contractor_order_count, contractor_id FROM order_order WHERE id NOT IN (1, 17) `
+				LEFT JOIN (SELECT COUNT (*) contractor_order_count, contractor_id FROM order_order WHERE id NOT IN (1, 17, 18) `
 	query += dateFilter
 	query += ` GROUP BY contractor_id) co
 					ON (object_id = co.contractor_id AND content_type_id=79)
@@ -502,11 +501,15 @@ func (db *DBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersF
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
 
 	// filter by date
-	args = append(args, ordersFilter.End)
-	filter = " AND oo.date_ordered<$" + strconv.Itoa(len(args))
+	if !ordersFilter.End.IsZero() {
+		args = append(args, ordersFilter.End)
+		filter = " AND oo.date_ordered<$" + strconv.Itoa(len(args))
+	}
 
-	args = append(args, ordersFilter.Start)
-	filter += " AND oo.date_ordered>$" + strconv.Itoa(len(args))
+	if !ordersFilter.Start.IsZero() {
+		args = append(args, ordersFilter.Start)
+		filter += " AND oo.date_ordered>$" + strconv.Itoa(len(args))
+	}
 
 	// filter by text
 	if ordersFilter.Text != "" {
@@ -514,6 +517,8 @@ func (db *DBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersF
 		filter += " AND (seller.name ILIKE $" + strconv.Itoa(len(args))
 		filter += " OR customer.name ILIKE $" + strconv.Itoa(len(args))
 		filter += " OR cc.name ILIKE $" + strconv.Itoa(len(args))
+		filter += " OR CAST(oo.id AS Text) LIKE $" + strconv.Itoa(len(args))
+		filter += " OR oo.contractor_number LIKE $" + strconv.Itoa(len(args))
 		filter += " OR cu.last_name ILIKE $" + strconv.Itoa(len(args))
 		filter += " OR cu.first_name ILIKE $" + strconv.Itoa(len(args))
 		filter += " OR cu.middle_name ILIKE $" + strconv.Itoa(len(args)) + ")"
@@ -547,7 +552,7 @@ func (db *DBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersF
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
-		WHERE oo.status_id NOT IN (17, 18)`
+		WHERE oo.status_id NOT IN (17) AND seller.object_id!=1`
 
 	// filter by access rights
 	filter, args := db.getOrdersFilterQuery(userInfo, ordersFilter)
@@ -625,13 +630,13 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
-		WHERE oo.status_id NOT IN (17, 18)`
+		WHERE oo.status_id NOT IN (17) AND seller.object_id!=1`
 
 	// filter by access rights
 	filter, args := db.getOrdersFilterQuery(userInfo, ordersFilter)
 
 	queryOrders += filter
-	queryOrders += `	ORDER BY date_ordered, contractor_number DESC`
+	queryOrders += `	ORDER BY COALESCE(COALESCE(date_ordered, date_updated), date_created) DESC, contractor_number DESC`
 
 	if ordersFilter.ItemsPerPage > 0 {
 		args = append(args, ordersFilter.ItemsPerPage)
@@ -687,9 +692,12 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 			s.AssignTo(&on_order_coupon_fixed)
 		}
 
-		s := "000000000"
-		s = s + toString(values[21])
-		contractor_number := s[len(s)-10:]
+		var contractor_number string
+		if values[21] != nil {
+			s := "000000000"
+			s = s + toString(values[21])
+			contractor_number = s[len(s)-11:]
+		}
 
 		entry := map[string]interface{}{
 			"id":                    id,

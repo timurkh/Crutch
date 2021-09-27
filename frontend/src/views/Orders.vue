@@ -188,6 +188,7 @@ export default {
       },
 			filterNormalized: {},
 			statuses: [
+				{name:'Новый', id: "18"}, 
 				{name:'Создан', id: "1"}, 
 				{name:'В обработке', id: "2"}, 
 				{name:'На согласовании', id: "3"}, 
@@ -211,7 +212,10 @@ export default {
 				return moment(this.filter.start).format('YYYY-MM-DD')
 			},
 			set(d) {
-				this.filter.start = moment(d).startOf('day').toDate()
+				if (d == null)
+					this.filter.start = null
+				else
+					this.filter.start = moment(d).startOf('day').toDate()
 			}
 		},
 		filterEnd: {
@@ -219,7 +223,10 @@ export default {
 				return moment(this.filter.end).format('YYYY-MM-DD')
 			},
 			set(d) {
-				this.filter.end = moment(d).endOf('day').toDate()
+				if (d == null)
+					this.filter.end = null
+				else 
+					this.filter.end = moment(d).endOf('day').toDate()
 			}
 		}
 
@@ -272,7 +279,7 @@ export default {
 			if (! (this.filter.start instanceof Date) || isNaN(this.filter.start)) 
 				this.filterNormalized.start = null
 			if (! (this.filter.end instanceof Date) || isNaN(this.filter.end)) 
-				this.filterNormalized.end = new Date()
+				this.filterNormalized.end = null
 			this.filterNormalized.page = 0
 			this.filterNormalized.itemsPerPage = 20
 

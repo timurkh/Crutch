@@ -21,6 +21,12 @@
 					placeholder="Город">
 				</VueMultiselect>
 			</div>
+			<div class="form-inline p-0 mx-1">
+				<input class="form-check-input" v-model="searchQuery.inStockOnly" type="checkbox" value="" id="flexCheckDefault">
+				<label class="form-check-label" for="flexCheckDefault">
+					В наличии
+				</label>
+			</div>
 			<div class="form-inline flex-grow-1 p-0 mx-1">
 				<input v-model="searchQuery.text" type="text" id="search-input" placeholder="Продукт" class="form-control flex-fill">
 			</div>
@@ -30,12 +36,6 @@
 		</div>
 		
 		<div class="d-flex flex-wrap">
-			<div class="form-inline p-0 mx-1">
-				<input class="form-check-input" v-model="searchQuery.inStockOnly" type="checkbox" value="" id="flexCheckDefault">
-				<label class="form-check-label" for="flexCheckDefault">
-					В наличии
-				</label>
-			</div>
 			<div class="form-inline p-1 pb-0 pr-0">
 				<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Категория"/>
 			</div>
@@ -124,7 +124,9 @@
 <script>
 import axios from 'axios'
 axios.defaults.baseURL = '/' + process.env.VUE_APP_BASE_URL
+
 import VueMultiselect from 'vue-multiselect'
+import { VueCookieNext } from 'vue-cookie-next'
 
 function doubleRaf (callback) {
 	requestAnimationFrame(() => {
@@ -156,6 +158,9 @@ export default {
 	},
 	created() {
 		window.onpopstate = this.onPopState
+		this.loadFromCookie(this.searchQuery, "supplier")
+		this.loadFromCookie(this.searchQuery, "inStockOnly")
+		this.loadFromCookie(this.searchQuery, "city")
 	},
 	watch : {
 		user : function(newVal){
@@ -174,6 +179,19 @@ export default {
 		window.removeEventListener('scroll', this.onScroll)
 	},  
   methods: {
+		loadFromCookie(val, name) {
+			if(VueCookieNext.getCookie(name)) {
+				var v = VueCookieNext.getCookie(name)
+
+				if(v != null && v != undefined) {
+					val[name] = v
+				}
+			}
+		},
+		saveToCookie(val, name) {
+			if(name in val && val[name] !== undefined)
+				VueCookieNext.setCookie(name, val[name])
+		},
 		sortingEnabled() {
 			return this.priceSorting === 'up' || this.priceSorting === 'down'
 		},
@@ -201,11 +219,7 @@ export default {
 			}
 		},
 		searchQueryNotEmpty() {
-				return this.searchQuery.text != null && this.searchQuery.text.length > 2 || 
-				this.searchQuery.category != null && this.searchQuery.category.length > 2 || 
-				this.searchQuery.code != null && this.searchQuery.code.length > 2 || 
-				this.searchQuery.property != null && this.searchQuery.property.length > 2 || 
-				this.searchQuery.name != null && this.searchQuery.name.length > 2  
+				return this.searchQuery.text != null && this.searchQuery.text.length > 2
 		},
 		onPopState(e) {
 			this.searchQuery = e.state
@@ -223,6 +237,9 @@ export default {
 		},
 		onSearchSubmit() {
 			this.searchQuery.operator = ""
+			this.saveToCookie(this.searchQuery, "supplier")
+			this.saveToCookie(this.searchQuery, "inStockOnly")
+			this.saveToCookie(this.searchQuery, "city")
 			this.searchProducts().then( ()  => {
 				if(this.searchResults===undefined || this.searchResults.length === 0) {
 					this.searchQuery.operator = "OR"

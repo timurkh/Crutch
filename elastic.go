@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/elastic/go-elasticsearch/v5"
 )
@@ -60,7 +59,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 		"simple_query_string": map[string]interface{}{
 			"query":            query.Text,
 			"default_operator": operator,
-			"analyzer":         "russian",
+			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
 				"code^3",
 				"category^5",
@@ -68,14 +67,20 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 				"properties",
 				"description",
 			},
+			"minimum_should_match": "50%",
 		},
 	}
+	/*mustRequirement2 := map[string]interface{}{
+		"query_string": map[string]interface{}{
+			"query": query.Text,
+		},
+	}*/
 
 	filterRequirements := make([]interface{}, 0)
 	if len(query.Category) > 2 {
 		filterRequirements = append(filterRequirements, map[string]interface{}{
-			"wildcard": map[string]interface{}{
-				"category.name": strings.ToLower(query.Category) + "*",
+			"match": map[string]interface{}{
+				"category.name": query.Category,
 			},
 		},
 		)
@@ -83,8 +88,8 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	if len(query.Code) > 2 {
 		filterRequirements = append(filterRequirements, map[string]interface{}{
-			"wildcard": map[string]interface{}{
-				"code": "*" + strings.ToLower(query.Code) + "*",
+			"match": map[string]interface{}{
+				"code": query.Code,
 			},
 		},
 		)
@@ -92,8 +97,8 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	if len(query.Name) > 2 {
 		filterRequirements = append(filterRequirements, map[string]interface{}{
-			"wildcard": map[string]interface{}{
-				"name": strings.ToLower(query.Name) + "*",
+			"match": map[string]interface{}{
+				"name": query.Name,
 			},
 		},
 		)
@@ -112,8 +117,16 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	q := map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
-				"must":   mustRequirement,
-				"filter": filterRequirements,
+				"should": []map[string]interface{}{
+					{"bool": map[string]interface{}{
+						"must":   mustRequirement,
+						"filter": filterRequirements,
+					}},
+					/*					{"bool": map[string]interface{}{
+										"must":   mustRequirement,
+										"filter": filterRequirements,
+									}},*/
+				},
 			},
 		},
 		"size": strconv.Itoa(itemsPerPage),
@@ -128,8 +141,8 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	res, err := es.client.Search(
 		es.client.Search.WithContext(ctx),
-		es.client.Search.WithIndex("severstal"),
-		es.client.Search.WithDocumentType("model-Product"),
+		es.client.Search.WithIndex("severstal_product"),
+		es.client.Search.WithDocumentType("_doc"),
 		es.client.Search.WithBody(&buf),
 	)
 	if err != nil {
@@ -158,7 +171,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 		return nil, 0, err
 	}
 
-	total := int(response["hits"].(map[string]interface{})["total"].(float64))
+	total := int(response["hits"].(map[string]interface{})["total"].(map[string]interface{})["value"].(float64))
 
 	//temp workaround
 	if total > 10000 {

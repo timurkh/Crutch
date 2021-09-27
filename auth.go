@@ -92,28 +92,43 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	re := regexp.MustCompile(`[^{]*({.*})$`)
 	jsonSessionData := re.ReplaceAllString(string(decodedSessionData), "${1}")
 
-	log.Printf("SessionData: %v\n", jsonSessionData)
+	log.Info("SessionData: ", jsonSessionData)
 	var sessionData struct {
 		UserID int `json:"_auth_user_id"`
 	}
 	json.Unmarshal([]byte(jsonSessionData), &sessionData)
 
-	log.Printf("UserID: %v\n", sessionData.UserID)
+	log.Info("UserID: ", sessionData.UserID)
 
 	ui := UserInfo{Id: sessionData.UserID}
 	udi, err := auth.db.getUserInfo(ui.Id)
+	log.Info(fmt.Sprintf("UserInfo: %+v", udi))
+
 	if err != nil {
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return err
 	}
 
-	if !udi.is_superuser && !udi.is_staff && udi.contractor_id != 2 {
-		// not severstal
-		err = fmt.Errorf("User %v (contractor %v) attempted to use crutch", ui.Id, udi.contractor_id)
-		log.Error(err)
-		http.Error(w, "", http.StatusForbidden)
-		return err
+	if !udi.is_superuser && !udi.is_staff {
+		severstalCompanies := map[int]bool{
+			2:  true,
+			7:  true,
+			8:  true,
+			9:  true,
+			10: true,
+			11: true,
+			12: true,
+			13: true,
+			29: true,
+			43: true,
+		}
+		if _, found := severstalCompanies[udi.contractor_id]; !found {
+			err = fmt.Errorf("User %v (contractor %v) attempted to use crutch", ui.Id, udi.contractor_id)
+			log.Error(err)
+			http.Error(w, "", http.StatusForbidden)
+			return err
+		}
 	}
 
 	ui.Name = udi.first_name + " " + udi.last_name

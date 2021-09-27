@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"unicode/utf8"
 
 	"net/http"
 	"regexp"
@@ -299,19 +300,7 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 		return err
 	}
 
-	streamWriter.MergeCell("A1", "T1")
-	streamWriter.SetRow("U1", []interface{}{
-		excelize.Cell{Value: "Поставщик"},
-	})
-
-	streamWriter.MergeCell("U1", "Y1")
-	streamWriter.SetRow("Z1", []interface{}{
-		excelize.Cell{Value: "Администратор"},
-	})
-
-	streamWriter.MergeCell("Z1", "AB1")
-
-	streamWriter.SetRow("A2", []interface{}{
+	columnNames := []interface{}{
 		excelize.Cell{Value: "#"},
 		excelize.Cell{Value: "Название компании"},
 		excelize.Cell{Value: "Роль"},
@@ -340,7 +329,28 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 		excelize.Cell{Value: "Имя"},
 		excelize.Cell{Value: "Телефон"},
 		excelize.Cell{Value: "E-Mail"},
+	}
+	for i, columnName := range columnNames {
+		cellWidth := utf8.RuneCountInString(columnName.(excelize.Cell).Value.(string)) + 2 // + 2 for margin
+		if cellWidth < 6 {
+			cellWidth = 6
+		}
+		streamWriter.SetColWidth(i+1, i+1, float64(cellWidth))
+	}
+
+	streamWriter.MergeCell("A1", "T1")
+	streamWriter.SetRow("U1", []interface{}{
+		excelize.Cell{Value: "Поставщик"},
 	})
+
+	streamWriter.MergeCell("U1", "Y1")
+	streamWriter.SetRow("Z1", []interface{}{
+		excelize.Cell{Value: "Администратор"},
+	})
+
+	streamWriter.MergeCell("Z1", "AB1")
+
+	streamWriter.SetRow("A2", columnNames)
 
 	row := 3
 	for _, cp := range counterparts {
@@ -501,6 +511,17 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 	return nil
 }
 
+func getNums(orderDetail map[string]interface{}) (float64, float64, float64, float64, float64) {
+	count := orderDetail["count"].(float64)
+	price := orderDetail["price"].(float64)
+	sum := orderDetail["sum"].(float64)
+	nds := orderDetail["nds"].(float64)
+	tax_item := math.Floor(price*nds+0.5) / 100
+	tax := tax_item * count
+
+	return count, price, sum, nds, tax
+}
+
 func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.Request) error {
 
 	var ordersFilter OrdersFilter
@@ -525,6 +546,49 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
+	}
+
+	//set column width
+	columnNames := []interface{}{
+		excelize.Cell{Value: "ID"},
+		excelize.Cell{Value: "Номер заказа"},
+		excelize.Cell{Value: "Дата заказа"},
+		excelize.Cell{Value: "Дата согласования"},
+		excelize.Cell{Value: "Продавец"},
+		excelize.Cell{Value: "Адрес"},
+		excelize.Cell{Value: "ИНН/КПП продавца"},
+		excelize.Cell{Value: "Грузоотправитель"},
+		excelize.Cell{Value: "Адрес грузоотправителя"},
+		excelize.Cell{Value: "Грузополучатель"},
+		excelize.Cell{Value: "Адрес грузополучателя"},
+		excelize.Cell{Value: "Покупатель"},
+		excelize.Cell{Value: "Адрес покупателя"},
+		excelize.Cell{Value: "ИНН поставщика"},
+		excelize.Cell{Value: "КПП поставщика"},
+		excelize.Cell{Value: "ИНН покупателя"},
+		excelize.Cell{Value: "КПП покупателя"},
+		excelize.Cell{Value: "Код товара/работ, услуг"},
+		excelize.Cell{Value: "Артикул"},
+		excelize.Cell{Value: "Наименование товара"},
+		excelize.Cell{Value: "Единица обозначения - условное обозначение (национальное)"},
+		excelize.Cell{Value: "Количество (объём)"},
+		excelize.Cell{Value: "Цена (тариф) за единицу измерения"},
+		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав без налога - всего"},
+		excelize.Cell{Value: "Налоговая ставка"},
+		excelize.Cell{Value: "Сумма налога, предъявляемая покупателю"},
+		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав с налогом - всего"},
+		excelize.Cell{Value: "Дата поставки (предполагаемая)"},
+		excelize.Cell{Value: "Дата отгрузки"},
+		excelize.Cell{Value: "Время отгрузки"},
+		excelize.Cell{Value: "Дата передачи"},
+		excelize.Cell{Value: "Время передачи"},
+		excelize.Cell{Value: "Дата приёмки"},
+		excelize.Cell{Value: "Время приёмки"},
+		excelize.Cell{Value: "Статус"},
+	}
+	for i, columnName := range columnNames {
+		cellWidth := utf8.RuneCountInString(columnName.(excelize.Cell).Value.(string)) + 2 // + 2 for margin
+		streamWriter.SetColWidth(i+1, i+1, float64(cellWidth))
 	}
 
 	streamWriter.SetRow("A1", []interface{}{
@@ -573,43 +637,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	streamWriter.MergeCell("AE1", "AF1")
 	streamWriter.MergeCell("AG1", "AH1")
 
-	streamWriter.SetRow("A2", []interface{}{
-		excelize.Cell{Value: "ID"},
-		excelize.Cell{Value: "Номер заказа"},
-		excelize.Cell{Value: "Дата заказа"},
-		excelize.Cell{Value: "Дата согласования"},
-		excelize.Cell{Value: "Продавец"},
-		excelize.Cell{Value: "Адрес"},
-		excelize.Cell{Value: "ИНН/КПП продавца"},
-		excelize.Cell{Value: "Грузоотправитель"},
-		excelize.Cell{Value: "Адрес грузоотправителя"},
-		excelize.Cell{Value: "Грузополучатель"},
-		excelize.Cell{Value: "Адрес грузополучателя"},
-		excelize.Cell{Value: "Покупатель"},
-		excelize.Cell{Value: "Адрес покупателя"},
-		excelize.Cell{Value: "ИНН поставщика"},
-		excelize.Cell{Value: "КПП поставщика"},
-		excelize.Cell{Value: "ИНН покупателя"},
-		excelize.Cell{Value: "КПП покупателя"},
-		excelize.Cell{Value: "Код товара/работ, услуг"},
-		excelize.Cell{Value: "Артикул"},
-		excelize.Cell{Value: "Наименование товара"},
-		excelize.Cell{Value: "Единица обозначения - условное обозначение (национальное)"},
-		excelize.Cell{Value: "Количество (объём)"},
-		excelize.Cell{Value: "Цена (тариф) за единицу измерения"},
-		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав без налога - всего"},
-		excelize.Cell{Value: "Налоговая ставка"},
-		excelize.Cell{Value: "Сумма налога, предъявляемая покупателю"},
-		excelize.Cell{Value: "Стоимость товаров (работ, услуг), имущественных прав с налогом - всего"},
-		excelize.Cell{Value: "Дата поставки (предполагаемая)"},
-		excelize.Cell{Value: "Дата отгрузки"},
-		excelize.Cell{Value: "Время отгрузки"},
-		excelize.Cell{Value: "Дата передачи"},
-		excelize.Cell{Value: "Время передачи"},
-		excelize.Cell{Value: "Дата приёмки"},
-		excelize.Cell{Value: "Время приёмки"},
-		excelize.Cell{Value: "Статус"},
-	})
+	streamWriter.SetRow("A2", columnNames)
 
 	userInfo := mh.auth.getUserInfo(r)
 	orders, err := mh.db.getOrders(r.Context(), userInfo, ordersFilter)
@@ -628,74 +656,49 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 			return err
 		}
 
-		if len(orderDetails) == 0 {
-			continue
-		}
+		for i := 0; i < len(orderDetails); i++ {
+			orderDetail := orderDetails[i]
 
-		orderDetail := orderDetails[0]
-		sum := orderDetail["sum"].(float64)
-		nds := orderDetail["nds"].(float64)
-		tax := math.Floor(sum*nds) / 100
+			count, price, sum, nds, tax := getNums(orderDetail)
 
-		streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
-			excelize.Cell{Value: order["id"]},
-			excelize.Cell{Value: order["contractor_number"]},
-			excelize.Cell{Value: toDate(order["ordered_date"])},
-			excelize.Cell{Value: toDate(order["closed_date"])},
-			excelize.Cell{Value: "Общество с ограниченной ответственностью \"Центр Промышленных Закупок\""},
-			excelize.Cell{Value: "127299, г. Москва, ул. Клары Цеткин, д. 2, помещ. 138"},
-			excelize.Cell{Value: "3528136252/771301001"},
-			excelize.Cell{Value: order["seller_name"]},
-			excelize.Cell{Value: order["seller_address"]},
-			excelize.Cell{Value: order["customer_name"]},
-			excelize.Cell{Value: order["customer_address"]},
-			excelize.Cell{Value: order["customer_name"]},
-			excelize.Cell{Value: order["customer_address"]},
-			excelize.Cell{Value: order["seller_inn"]},
-			excelize.Cell{Value: order["seller_kpp"]},
-			excelize.Cell{Value: order["customer_inn"]},
-			excelize.Cell{Value: order["customer_kpp"]},
+			streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
+				excelize.Cell{Value: order["id"]},
+				excelize.Cell{Value: order["contractor_number"]},
+				excelize.Cell{Value: toDate(order["ordered_date"])},
+				excelize.Cell{Value: toDate(order["closed_date"])},
+				excelize.Cell{Value: "Общество с ограниченной ответственностью \"Центр Промышленных Закупок\""},
+				excelize.Cell{Value: "127299, г. Москва, ул. Клары Цеткин, д. 2, помещ. 138"},
+				excelize.Cell{Value: "3528136252/771301001"},
+				excelize.Cell{Value: order["seller_name"]},
+				excelize.Cell{Value: order["seller_address"]},
+				excelize.Cell{Value: order["customer_name"]},
+				excelize.Cell{Value: order["customer_address"]},
+				excelize.Cell{Value: order["customer_name"]},
+				excelize.Cell{Value: order["customer_address"]},
+				excelize.Cell{Value: order["seller_inn"]},
+				excelize.Cell{Value: order["seller_kpp"]},
+				excelize.Cell{Value: order["customer_inn"]},
+				excelize.Cell{Value: order["customer_kpp"]},
 
-			excelize.Cell{Value: orderDetail["product_id"]},
-			excelize.Cell{Value: orderDetail["code"]},
-			excelize.Cell{Value: orderDetail["name"]},
-			excelize.Cell{Value: "Шт"},
-			excelize.Cell{Value: orderDetail["count"]},
-			excelize.Cell{Value: orderDetail["price"]},
-			excelize.Cell{Value: sum},
-			excelize.Cell{Value: nds},
-			excelize.Cell{Value: tax},
-			excelize.Cell{Value: tax + sum},
-
-			excelize.Cell{Value: toDate(order["shipping_date_est"])},
-			excelize.Cell{Value: toDate(order["shipped_date"])},
-			excelize.Cell{Value: toTime(order["shipped_date"])},
-			excelize.Cell{Value: toDate(order["delivered_date"])},
-			excelize.Cell{Value: toTime(order["delivered_date"])},
-			excelize.Cell{Value: toDate(order["accepted_date"])},
-			excelize.Cell{Value: toTime(order["accepted_date"])},
-			excelize.Cell{Value: order["status"]},
-		})
-		row++
-
-		for i := 1; i < len(orderDetails); i++ {
-			orderDetail = orderDetails[i]
-
-			sum := orderDetail["sum"].(float64)
-			nds := orderDetail["nds"].(float64)
-			tax := math.Floor(sum*nds) / 100
-
-			streamWriter.SetRow(fmt.Sprintf("R%v", row), []interface{}{
 				excelize.Cell{Value: orderDetail["product_id"]},
 				excelize.Cell{Value: orderDetail["code"]},
 				excelize.Cell{Value: orderDetail["name"]},
 				excelize.Cell{Value: "Шт"},
-				excelize.Cell{Value: orderDetail["count"]},
-				excelize.Cell{Value: orderDetail["price"]},
+				excelize.Cell{Value: count},
+				excelize.Cell{Value: price},
 				excelize.Cell{Value: sum},
 				excelize.Cell{Value: nds},
 				excelize.Cell{Value: tax},
 				excelize.Cell{Value: tax + sum},
+
+				excelize.Cell{Value: toDate(order["shipping_date_est"])},
+				excelize.Cell{Value: toDate(order["shipped_date"])},
+				excelize.Cell{Value: toTime(order["shipped_date"])},
+				excelize.Cell{Value: toDate(order["delivered_date"])},
+				excelize.Cell{Value: toTime(order["delivered_date"])},
+				excelize.Cell{Value: toDate(order["accepted_date"])},
+				excelize.Cell{Value: toTime(order["accepted_date"])},
+				excelize.Cell{Value: order["status"]},
 			})
 
 			row++
