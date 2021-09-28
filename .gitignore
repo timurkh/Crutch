@@ -1,4 +1,5 @@
 #contains passwords
+conf/system/crutch.service
 crutch.service
 #compiled binaries
 crutch
