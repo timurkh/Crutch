@@ -1,0 +1,21 @@
+[Unit]
+Description=industrial.market crutch
+
+[Service]
+User=nobody
+WorkingDirectory=/home/timur/crutch/release
+ExecStart=/home/timur/crutch/release/crutch
+Environment=PORT=3000
+Environment=BASEURL=crutch
+Environment=DB_USER=crutch_ro
+Environment=DB_PASSWORD=d3fcsc33c
+Type=simple
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=crutch
+
+[Install]
+WantedBy=multi-user.target

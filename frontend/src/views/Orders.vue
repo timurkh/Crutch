@@ -188,7 +188,7 @@ export default {
       },
 			filterNormalized: {},
 			statuses: [
-				{name:'Новый', id: "18"}, 
+				{name:'Корзина', id: "18"}, 
 				{name:'Создан', id: "1"}, 
 				{name:'В обработке', id: "2"}, 
 				{name:'На согласовании', id: "3"}, 

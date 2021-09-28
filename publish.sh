@@ -3,18 +3,24 @@
 set -x
 set -e
 
-pushd /home/severstal/s/crutch/frontend
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+pushd $SCRIPT_DIR/frontend
 yarn build --mode=production
 cd ..
 go build
 
-rsync -av frontend/dist/ release/frontend/dist/
+mkdir -p $SCRIPT_DIR/release/frontend/dist
+rsync -av $SCRIPT_DIR/frontend/dist/ $SCRIPT_DIR/release/frontend/dist/
 
-sudo cp crutch.service /etc/systemd/system/
+sudo cp $SCRIPT_DIR/conf/logrotate.d/crutch /etc/logrotate.d/
+sudo cp $SCRIPT_DIR/conf/rsyslog.d/01-crutch.conf /etc/rsyslog.d
+
+sudo cp $SCRIPT_DIR/conf/system/crutch.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 sudo systemctl stop crutch; 
-cp /home/severstal/s/crutch/crutch /home/severstal/s/crutch/release/; 
+cp $SCRIPT_DIR/crutch $SCRIPT_DIR/release/; 
 sudo systemctl start crutch
 
 cd frontend
