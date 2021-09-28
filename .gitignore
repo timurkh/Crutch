@@ -6,3 +6,4 @@ crutch
 release
 #3rd party libraries
 node_modules
+package-lock.json
