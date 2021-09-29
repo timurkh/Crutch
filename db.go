@@ -26,6 +26,7 @@ type OrdersFilter struct {
 	End              time.Time `schema:"end"`
 	Text             string    `schema:"text"`
 	SelectedStatuses []int     `schema:"selectedStatuses[]"`
+	DateColumn string     `schema:"dateColumn"`
 	Page             int       `schema:"page"`
 	ItemsPerPage     int       `schema:"itemsPerPage"`
 }
@@ -501,14 +502,24 @@ func (db *DBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersF
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
 
 	// filter by date
-	if !ordersFilter.End.IsZero() {
-		args = append(args, ordersFilter.End)
-		filter = " AND oo.date_ordered<$" + strconv.Itoa(len(args))
+	dateColumn := ""
+	switch ordersFilter.DateColumn {
+	case "date_ordered":
+		dateColumn = "date_ordered"
+	case "date_closed":
+		dateColumn = "date_closed"
 	}
 
-	if !ordersFilter.Start.IsZero() {
-		args = append(args, ordersFilter.Start)
-		filter += " AND oo.date_ordered>$" + strconv.Itoa(len(args))
+	if dateColumn != "" {
+		if !ordersFilter.End.IsZero() {
+			args = append(args, ordersFilter.End)
+			filter = " AND oo." + dateColumn + "<$" + strconv.Itoa(len(args))
+		}
+
+		if !ordersFilter.Start.IsZero() {
+			args = append(args, ordersFilter.Start)
+			filter += " AND oo." + dateColumn + ">$" + strconv.Itoa(len(args))
+		}
 	}
 
 	// filter by text

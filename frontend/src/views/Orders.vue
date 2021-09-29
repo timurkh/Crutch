@@ -7,13 +7,13 @@
 	<form class="form-horizontal" @submit.prevent>
 		<div class="d-flex flex-wrap m-1 mb-2">
 			<div class="form-inline font-weight-bold mb-1">
-				{{totalOrders}} {{declOfNum(totalOrders, ["заказ", "заказа", "заказов"])}} на {{totalSum}} руб
+				{{totalOrders}} {{declOfNum(totalOrders, ["заказ", "заказа", "заказов"])}}, {{totalSum}} руб
 			</div>
 			<div class="form-inline flex-grow-1 mx-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
 			<div class="d-flex form-inline py-0 m-0" style="min-width: 120px;height:2.5rem">
-				<VueMultiselect v-model="filter.selectedStatuses" 
+				<VueMultiselect v-model="selectedStatuses" 
 					:options="statuses" 
 					:multiple="true" 
 					:searchable="false" 
@@ -21,17 +21,34 @@
 					label="name"
 					:close-on-select="false" 
 					:show-labels="false"
-					@update:model-value="onChange"
+					@update:model-value="onChangeSelectedStatuses"
 					placeholder="Статус">
 				<template v-slot:selection="{ values, isOpen }"><span class="multiselect__single" v-if="values.length > 0 || isOpen">{{ values.length }} {{declOfNum(values.length, ["статус", "статуса", "статусов"])}} {{declOfNum(values.length, ["выбран", "выбрано", "выбрано"])}}</span></template>
 				</VueMultiselect>
 			</div>
 			<div class="form-inline mx-1">
+				<div class="d-flex justify-center items-center" style="min-width: 145px">
+					<VueMultiselect 
+						id="dateColumn"
+						v-model="dateColumn" 
+						:options="dateColumns" 
+						:multiple="false" 
+						:searchable="false" 
+						track-by="id"
+						label="name"
+						:close-on-select="true" 
+						:show-labels="false"
+						@update:model-value="onChangeDateColumn"
+						>
+					</VueMultiselect>
+				</div>
+			</div>
+			<div class="form-inline mx-1">
 				<div class="d-flex justify-center items-center">
-					<label for="filterStart" class="mx-1">Заказы с</label> 
-					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange"/>
+					<label for="filterStart" class="mx-1">с</label> 
+					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange" :disabled="dateColumn.id === ''"/> 
 					<label for="filterEnd" class="mx-1">по</label> 
-					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange"/>
+					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange" :disabled="dateColumn.id === ''"/>
 				</div>
 			</div>
 			<div class="d-flex form-inline mr-1 dropleft">
@@ -74,14 +91,14 @@
 							<td class="col-3 text-left m-0 p-0">Поставщик</td>
 						</tr>
 					</th>
-					<th class="col-1">Cумма</th>
-					<th class="col-1">Статус</th>
-					<th class="col-3 text-left">
+					<th class="col-5 text-left">
 						<tr class="d-flex table-borderless m-0 p-0">
-							<td class="col-3 m-0 p-0">Создан</td>
-							<td class="col-3 m-0 p-0">Согласован</td>
-							<td class="col-3 m-0 p-0">Дата поставки</td>
-							<td class="col-3 m-0 p-0">Доставлен</td>
+							<th class="col-2 m-0 p-0">Cумма</th>
+							<th class="col-2 m-0 p-0">Статус</th>
+							<td class="col-2 m-0 p-0">Создан</td>
+							<td class="col-2 m-0 p-0">Согласован</td>
+							<td class="col-2 m-0 p-0">Дата поставки</td>
+							<td class="col-2 m-0 p-0">Доставлен</td>
 						</tr>
 					</th>
 				</tr>
@@ -100,14 +117,14 @@
 								<td class="col-3 text-left m-0 p-0">{{order.seller_name}}</td>
 							</tr>
 						</td>
-						<td class="col-1">{{order.sum}}</td>
-						<td class="col-1">{{order.status}}</td>
-						<td class="col-3 text-left" :id="order.id">
+						<td class="col-5 text-left" :id="order.id">
 							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
-								<td class="col-3 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDate(order.closed_date)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
+								<td class="col-2 m-0 p-0">{{order.sum}}</td>
+								<td class="col-2 m-0 p-0">{{order.status}}</td>
+								<td class="col-2 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
+								<td class="col-2 m-0 p-0">{{formatDate(order.closed_date)}}</td>
+								<td class="col-2 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
+								<td class="col-2 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
 							</tr>
 						</td>
 					</tr>
@@ -186,6 +203,7 @@ export default {
 				selectedStatuses: null,
 				text: "",
       },
+			selectedStatuses: [],
 			filterNormalized: {},
 			statuses: [
 				{name:'Корзина', id: "18"}, 
@@ -203,6 +221,12 @@ export default {
 				{name:'Предзаказ', id: "26"}, 
 				{name:'Отказ/Не согласован', id: "4"}, 
 			],
+			dateColumns: [
+				{name:'все', id: ""}, 
+				{name:'созданные', id: "date_ordered"}, 
+				{name:'согласованные', id: "date_closed"}, 
+			],
+			dateColumn: {name:'все', id: ""}, 
 			moreAvailable: true,
 		} 
 	},
@@ -266,16 +290,24 @@ export default {
 				return this.getOrders()
 			}
 		},
+		onChangeDateColumn() {
+			this.filter.dateColumn =  this.dateColumn.id
+			this.onChange()
+		},
+		onChangeSelectedStatuses() {
+			if (this.selectedStatuses != null) 
+				this.filter.selectedStatuses =  this.selectedStatuses.map(value => value.id)
+			else
+				this.filter.selectedStatuses = null
+			this.onChange()
+		},
 		onChange() {
-
 			history.pushState( JSON.parse(JSON.stringify(this.filter)), this.getFilterText(), "/" + process.env.VUE_APP_BASE_URL + "/orders?" + this.getFilterText())  
 			return this.getOrders()
 		},
 		getOrders() {
 			this.orders = []
 			this.filterNormalized = Object.assign({}, this.filter)
-			if (this.filter.selectedStatuses != null) 
-				this.filterNormalized.selectedStatuses =  this.filter.selectedStatuses.map(value => value.id)
 			if (! (this.filter.start instanceof Date) || isNaN(this.filter.start)) 
 				this.filterNormalized.start = null
 			if (! (this.filter.end instanceof Date) || isNaN(this.filter.end)) 
