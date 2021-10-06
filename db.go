@@ -703,10 +703,10 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 			s.AssignTo(&on_order_coupon_fixed)
 		}
 
-		var contractor_number string
-		if values[21] != nil {
-			s := "000000000"
-			s = s + toString(values[21])
+		contractor_number := toString(values[21])
+		if contractor_number != "" {
+			s := "00000000000"
+			s = s + contractor_number
 			contractor_number = s[len(s)-11:]
 		}
 

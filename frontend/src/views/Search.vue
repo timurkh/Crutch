@@ -161,6 +161,9 @@ export default {
 		this.loadFromCookie(this.searchQuery, "supplier")
 		this.loadFromCookie(this.searchQuery, "inStockOnly")
 		this.loadFromCookie(this.searchQuery, "city")
+		this.searchQuery.text = this.$route.query.query		
+		if(this.searchQueryNotEmpty())
+			this.searchProducts()
 	},
 	watch : {
 		user : function(newVal){

@@ -198,7 +198,7 @@ export default {
 			totalSum: 0,
 			order_details:{},
 			filter: {
-        start: new Date(2021, 0, 1),
+        start: new Date(),
         end: new Date(),
 				selectedStatuses: null,
 				text: "",
@@ -226,7 +226,7 @@ export default {
 				{name:'созданные', id: "date_ordered"}, 
 				{name:'согласованные', id: "date_closed"}, 
 			],
-			dateColumn: {name:'все', id: ""}, 
+			dateColumn: {}, 
 			moreAvailable: true,
 		} 
 	},
@@ -256,7 +256,13 @@ export default {
 
   },
 	created() {
+		this.dateColumn = this.dateColumns[1]
+		this.filter.dateColumn =  this.dateColumn.id
+    this.filter.start = new Date(moment().startOf("week"))
+    this.filter.end = new Date(moment().endOf("day"))
+
 		window.onpopstate = this.onPopState
+		
 		setTimeout(this.getOrders, 200)
 	},
 	mounted() {

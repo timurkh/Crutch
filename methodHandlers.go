@@ -214,6 +214,32 @@ func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request)
 
 }
 
+func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(struct {
+		UserInfo
+		Cities []City `json:"cities"`
+	}{userInfo, cities})
+
+	log.Info(userInfo)
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+
+}
+
 func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.Request) error {
 
 	var filter CounterpartsFilter

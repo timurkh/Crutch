@@ -50,13 +50,15 @@ func main() {
 	db_host := getEnv("DB_HOST", "10.130.0.13:5432")
 	db_user := getEnv("DB_USER", "pguser")
 	db_password := getEnv("DB_PASSWORD", "pgpassword")
+	db_database := getEnv("DB_DATABASE", "optima3_severstal")
+	standinUrl := getEnv("STANDINURL", "standindev")
 
 	es, err := initElasticHelper(elastic)
 	if err != nil {
 		log.Fatalf("Failed to init Elastic connection: %v\n", err)
 	}
 
-	db, err := initDBHelper(db_host, db_user, db_password, "optima3_severstal")
+	db, err := initDBHelper(db_host, db_user, db_password, db_database)
 	if err != nil {
 		log.Fatalf("Failed to init DB connection: %v\n", err)
 	}
@@ -77,9 +79,16 @@ func main() {
 	crutchAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
+	fsCrutch := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //wrapHandler is used to handle history mode URLs
+	crutch.PathPrefix("/").Handler(http.StripPrefix("/"+baseUrl, fsCrutch))
 
-	fs := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //warpHandler is used to handle history mode URLs
-	crutch.PathPrefix("/").Handler(http.StripPrefix("/"+baseUrl, fs))
+	standinAPI := router.PathPrefix("/" + standinUrl + "/methods").Subrouter()
+	standinAPI.Use(auth.authMiddleware)
+	standinAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUserSI))
+
+	standin := router.PathPrefix("/" + standinUrl).Subrouter()
+	fsStandin := wrapHandler(http.FileServer(http.Dir("./standin/dist")), "/"+standinUrl)
+	standin.PathPrefix("/").Handler(http.StripPrefix("/"+standinUrl, fsStandin))
 
 	http.Handle("/", WithLogging(router))
 
@@ -115,7 +124,7 @@ func wrapHandler(h http.Handler, baseUrl string) http.HandlerFunc {
 			h.ServeHTTP(nfrw, r)
 
 			if nfrw.status == http.StatusNotFound {
-				log.Info("Requested ", r.RequestURI, ", Path ", r.URL.Path)
+				log.Info("Requested ", r.RequestURI, ", Path ", r.URL.Path, ", Replied ", nfrw.status)
 				r.URL.Path = "/"
 				w.Header().Set("Content-Type", "text/html")
 				h.ServeHTTP(w, r)
@@ -126,17 +135,29 @@ func wrapHandler(h http.Handler, baseUrl string) http.HandlerFunc {
 	}
 }
 
+type CustomRespWr struct {
+	http.ResponseWriter // We embed http.ResponseWriter
+	status              int
+}
+
+func (w *CustomRespWr) WriteHeader(status int) {
+	w.status = status // Store the status for our own use
+	w.ResponseWriter.WriteHeader(status)
+}
+
 func WithLogging(h http.Handler) http.Handler {
 	logFn := func(rw http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		uri := r.RequestURI
 		method := r.Method
-		h.ServeHTTP(rw, r) // serve the original request
+
+		crw := &CustomRespWr{ResponseWriter: rw}
+		h.ServeHTTP(crw, r) // serve the original request
 
 		duration := time.Since(start)
 
-		log.Info(method, " ", uri, " ", duration)
+		log.Info(crw.status, " ", method, " ", uri, " ", duration)
 	}
 	return http.HandlerFunc(logFn)
 }

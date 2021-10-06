@@ -110,7 +110,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
-	if !udi.is_superuser && !udi.is_staff {
+/*	if !udi.is_superuser && !udi.is_staff {
 		severstalCompanies := map[int]bool{
 			2:  true,
 			7:  true,
@@ -130,6 +130,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 			return err
 		}
 	}
+*/
 
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
