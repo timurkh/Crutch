@@ -84,7 +84,9 @@ func main() {
 
 	standinAPI := router.PathPrefix("/" + standinUrl + "/methods").Subrouter()
 	standinAPI.Use(auth.authMiddleware)
-	standinAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUserSI))
+	standinAPI.Methods("GET").Path("/current-user").Handler(appHandler(methods.getCurrentUserSI))
+	standinAPI.Methods("GET").Path("/cart-preview").Handler(appHandler(methods.getCartContent))
+	standinAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 
 	standin := router.PathPrefix("/" + standinUrl).Subrouter()
 	fsStandin := wrapHandler(http.FileServer(http.Dir("./standin/dist")), "/"+standinUrl)

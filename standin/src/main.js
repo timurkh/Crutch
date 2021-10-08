@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
-import VTooltip from 'v-tooltip'
 import App from './App.vue'
+import Popper from "vue3-popper";
 
-let app = createApp(App)
-app.use(VTooltip)
+const app = createApp(App)
+app.component("Popper", Popper);
 app.mount('#app')

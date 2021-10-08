@@ -26,7 +26,7 @@ type OrdersFilter struct {
 	End              time.Time `schema:"end"`
 	Text             string    `schema:"text"`
 	SelectedStatuses []int     `schema:"selectedStatuses[]"`
-	DateColumn string     `schema:"dateColumn"`
+	DateColumn       string    `schema:"dateColumn"`
 	Page             int       `schema:"page"`
 	ItemsPerPage     int       `schema:"itemsPerPage"`
 }
@@ -66,6 +66,9 @@ type UserDBInfo struct {
 	verified         bool
 	blocked          bool
 	contractor_id    int
+	contractor_name  string
+	supplier_id      int
+	supplier_name    string
 }
 
 func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
@@ -82,13 +85,18 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 			COALESCE( can_read_sellers, FALSE) can_read_sellers,
 			verified, 
 			blocked,
-			COALESCE( current_contractor_id, 0)
+			COALESCE( current_contractor_id, 0),
+			COALESCE( cc.name, ''),
+			COALESCE( supplier_id, 0),
+			COALESCE( sp.name, '')
 		FROM 
 			core_user cu 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_orders FROM core_user_user_permissions up WHERE permission_id=1067) ro ON (ro.user_id=cu.id AND cu.is_staff) 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_buyers FROM core_user_user_permissions up WHERE permission_id=286) rb ON (rb.user_id=cu.id AND cu.is_staff) 
 			LEFT JOIN (SELECT user_id, TRUE as can_read_sellers FROM core_user_user_permissions up WHERE permission_id=678) rs ON (rs.user_id=cu.id AND cu.is_staff) 
-		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.is_company_admin, &ui.can_read_orders, &ui.can_read_buyers, &ui.can_read_sellers, &ui.verified, &ui.blocked, &ui.contractor_id)
+			LEFT JOIN company_company cc ON (cc.object_id=cu.current_contractor_id AND cc.content_type_id=79)
+			LEFT JOIN company_company sp ON (sp.object_id=cu.supplier_id AND sp.content_type_id=186)
+		WHERE cu.id =$1`, userId).Scan(&ui.first_name, &ui.last_name, &ui.email, &ui.is_superuser, &ui.is_staff, &ui.is_company_admin, &ui.can_read_orders, &ui.can_read_buyers, &ui.can_read_sellers, &ui.verified, &ui.blocked, &ui.contractor_id, &ui.contractor_name, &ui.supplier_id, &ui.supplier_name)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve user info: %v", err)
 	}
@@ -120,6 +128,30 @@ func (db *DBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInf
 	return cities, rows.Err()
 }
 
+func (db *DBHelper) getSupplierCities(ctx context.Context, supplierId int) (cities []City, err error) {
+
+	var rows pgx.Rows
+
+	rows, _ = db.pool.Query(ctx, `
+		SELECT DISTINCT dc.city_id, city 
+		FROM supplier_warehouse_delivery_cities dc 
+			JOIN supplier_warehouse sw ON sw.id = dc.warehouse_id 
+			JOIN company_city c ON c.id=dc.city_id 
+		WHERE supplier_id=$1`, supplierId)
+
+	cities = make([]City, 0)
+	for rows.Next() {
+		var city City
+		err := rows.Scan(&city.Id, &city.Name)
+		if err != nil {
+			return nil, err
+		}
+		cities = append(cities, city)
+	}
+
+	return cities, rows.Err()
+}
+
 func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []map[string]interface{}, err error) {
 
 	args := []interface{}{product_ids}
@@ -127,41 +159,45 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	supplier_warehouses := ""
 	if userInfo.Admin {
 		if city_id > 0 {
+			args = append(args, city_id)
 			supplier_warehouses = `
 			AND pr.warehouse_id IN (
 			SELECT sw.id 
 			FROM supplier_warehouse sw 
 				INNER JOIN supplier_warehouse_delivery_cities swc ON (sw.id = swc.warehouse_id) 
 			WHERE sw.is_visible = true  
-				AND swc.city_id = $2)`
-			args = append(args, city_id)
+				AND swc.city_id = $` + strconv.Itoa(len(args))
 		}
 	} else {
-		client_cities := `
-		SELECT DISTINCT city_id 
-		FROM core_user_contractors cuc 
-			JOIN consignee_consignee con USING(contractor_id) 
-			JOIN company_city com on com.id = con.city_id 
-		WHERE cuc.user_id=$2`
-
-		args = append(args, userInfo.Id)
-
-		if city_id > 0 {
-			client_cities = client_cities + " AND city_id = $3"
-			args = append(args, city_id)
-		}
-
 		supplier_warehouses = `
 		AND pr.warehouse_id IN (
 		SELECT sw.id 
 		FROM supplier_warehouse sw 
 			INNER JOIN supplier_warehouse_delivery_cities swc ON (sw.id = swc.warehouse_id) 
 		WHERE sw.is_visible = true  
-			AND swc.city_id IN (` + client_cities + `))`
+		`
+		if userInfo.SupplierId == 0 {
+			args = append(args, userInfo.Id)
+			client_cities := `
+			SELECT DISTINCT city_id 
+			FROM core_user_contractors cuc 
+				JOIN consignee_consignee con USING(contractor_id) 
+				JOIN company_city com on com.id = con.city_id 
+			WHERE cuc.user_id=$` + strconv.Itoa(len(args))
+
+			supplier_warehouses += `	AND swc.city_id IN (` + client_cities + `)`
+		}
+
+		if city_id > 0 {
+			args = append(args, city_id)
+			supplier_warehouses = supplier_warehouses + " AND swc.city_id=$" + strconv.Itoa(len(args))
+		}
+
+		supplier_warehouses += `)`
 	}
 
 	product_quantity := `
-	SELECT
+	SELECT 
 		pp.id,
 		SUM(pr.rest) AS rest,
 		ordering
@@ -172,12 +208,33 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		JOIN (SELECT * FROM unnest($1::int[]) WITH ORDINALITY) x (id, ordering) ON (pp.id = x.id)
 	WHERE
 		pp.deleted = false
+		AND pm.deleted = false
 		AND pp.is_reference = false
 		AND pp.b_placement_state = 'placed'
 		AND pp.category_id IS NOT NULL
 		AND pp.hidden = false  
 	` + supplier_warehouses + `
 	GROUP BY pp.id, ordering`
+
+	product_modifications := `
+	SELECT DISTINCT ON (pp.id)
+		pp.id,
+		pm.id AS modification_id,
+		pr.warehouse_id
+	FROM
+		product_product pp
+		JOIN product_modification pm ON ( pp.id = pm.product_id )
+		JOIN product_rest  pr ON ( pm.id = pr.modification_id )
+	WHERE
+		pp.id = ANY($1)
+		AND pp.deleted = false
+		AND pm.deleted = false
+		AND pp.is_reference = false
+		AND pp.b_placement_state = 'placed'
+		AND pp.category_id IS NOT NULL
+		AND pp.hidden = false  
+	` + supplier_warehouses + `
+	ORDER BY pp.id, pr.rest DESC`
 
 	query := `
 	SELECT
@@ -188,14 +245,25 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		pp.description,
 		pr.rest,
 		pp.product_price,
-		cc.name as supplier
+		cc.name as supplier,
+		COALESCE(pi.image, ''),
+		pm.modification_id,
+		pm.warehouse_id
 	FROM 
 		( ` + product_quantity + ` 
 			) pr 
+		JOIN (` + product_modifications + `) pm USING (id)
 		JOIN product_product pp USING (id) 
 		JOIN product_category pc ON ( pp.category_id = pc.id )
 		JOIN product_suppliercategory psc ON (pp.supplier_category_id = psc.id)
 		JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
+		JOIN (
+			SELECT DISTINCT ON (pm.product_id) pi.image, pm.product_id
+			FROM product_image pi
+				JOIN product_modification pm ON ( pi.modification_id = pm.id )
+				WHERE pi.image > '' AND pm.product_id=ANY($1) AND pm.deleted = false 
+				ORDER BY pm.product_id, pi.is_base DESC, pi.position ASC, pi.id ASC
+		) pi ON pi.product_id = pp.id
 	WHERE 
 		pc.hidden = false
 		AND (NOT pr.rest = 0.0`
@@ -205,7 +273,10 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	}
 	query += ")"
 
-	if supplier != "" {
+	if userInfo.SupplierId != 0 {
+		args = append(args, userInfo.SupplierId)
+		query += " AND supplier_id=$" + strconv.Itoa(len(args)) + ""
+	} else if supplier != "" {
 		args = append(args, "%"+supplier+"%")
 		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args)) + ""
 	}
@@ -243,14 +314,17 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		}
 
 		entry := map[string]interface{}{
-			"id":          id,
-			"category":    category,
-			"code":        code,
-			"name":        name,
-			"description": description,
-			"rest":        toFloat(values[5]),
-			"price":       price,
-			"supplier":    supplier,
+			"id":              id,
+			"category":        category,
+			"code":            code,
+			"name":            name,
+			"description":     description,
+			"rest":            toFloat(values[5]),
+			"price":           price,
+			"supplier":        supplier,
+			"image":           toString(values[8]),
+			"modification_id": toInt(values[9]),
+			"warehouse_id":    toInt(values[10]),
 		}
 		entry["score"] = products_score[id]
 		products = append(products, entry)
@@ -964,4 +1038,125 @@ func (db *DBHelper) getOrdersCSV(ctx context.Context, userInfo UserInfo, file *o
 	}
 
 	return nil
+}
+
+type CartNumbers struct {
+	OrdersCount int     `json:"ordersCount"`
+	TotalSum    float64 `json:"totalSum"`
+	ItemsCount  int     `json:"itemsCount"`
+}
+
+func (db *DBHelper) getCartNumbers(ctx context.Context, ui UserInfo) (*CartNumbers, error) {
+	cn := CartNumbers{}
+	err := db.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT oo.id) AS orders_count, COALESCE(SUM(items_discounted_price), 0) as total_sum, COUNT(oi.id) AS items_count FROM order_order oo
+			JOIN (
+				SELECT
+					oi.id,
+					oi.order_id,
+					pp.id product_id,
+					pp.name,
+					pp.code,
+					pc.name as category,
+					sw.name AS warehouse,
+					sw.id AS warehouse_id,
+					oi.count,
+					oi.item_price,
+					oi.rate_nds,
+					oi.coupon_percent,
+					oi.coupon_fixed,
+					oi.coupon_value,
+					oi.comment,
+					round((((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2)*count AS items_discounted_price
+
+				FROM order_orderitem oi
+						JOIN order_order oo ON (oi.order_id = oo.id)
+						JOIN product_modification pm ON (oi.modification_id = pm.id)
+						JOIN product_product pp ON (pm.product_id = pp.id)
+						LEFT JOIN supplier_warehouse sw ON (sw.id = oi.warehouse_id)
+						LEFT JOIN product_category pc ON (pc.id = category_id)
+			) oi ON oo.id = oi.order_id
+		WHERE user_id=$1 AND status_id=18 AND deleted != TRUE
+		`, ui.Id).Scan(&cn.OrdersCount, &cn.TotalSum, &cn.ItemsCount)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to retrieve user cart numbers: %v", err)
+	}
+
+	return &cn, nil
+
+}
+
+func (db *DBHelper) getCompareItemsCount(ctx context.Context, ui UserInfo) (int, error) {
+	var ci int
+	err := db.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM compare_comparelist c JOIN compare_compareitem ci ON c.id = ci.compare_id WHERE c.name=$1
+		`, ui.CompareList).Scan(&ci)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to retrieve user compare items count: %v", err)
+	}
+
+	return ci, nil
+}
+
+type CartItem struct {
+	OrderId     int     `json:"orderId"`
+	ProductId   int     `json:"productId"`
+	ProductCode string  `json:"productCode"`
+	Count       float64 `json:"count"`
+	ProductName string  `json:"productName"`
+	ItemPrice   float64 `json:"itemPrice"`
+}
+
+func (db *DBHelper) getCartItems(ctx context.Context, ui UserInfo) (map[int]CartItem, error) {
+	rows, _ := db.pool.Query(ctx, `
+		SELECT oo.id, product_id, oi.code, count, oi.name, item_discounted_price FROM order_order oo
+			JOIN (
+				SELECT
+					oi.id,
+					oi.order_id,
+					pp.id product_id,
+					pp.name,
+					pp.code,
+					pc.name as category,
+					sw.name AS warehouse,
+					sw.id AS warehouse_id,
+					oi.count,
+					oi.item_price,
+					oi.rate_nds,
+					oi.coupon_percent,
+					oi.coupon_fixed,
+					oi.coupon_value,
+					oi.comment,
+					round((((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2)*count AS item_discounted_price
+
+				FROM order_orderitem oi
+						JOIN order_order oo ON (oi.order_id = oo.id)
+						JOIN product_modification pm ON (oi.modification_id = pm.id)
+						JOIN product_product pp ON (pm.product_id = pp.id)
+						LEFT JOIN supplier_warehouse sw ON (sw.id = oi.warehouse_id)
+						LEFT JOIN product_category pc ON (pc.id = category_id)
+			) oi ON oo.id = oi.order_id
+		WHERE user_id=$1 AND status_id=18 AND deleted != TRUE
+		
+		`, ui.Id)
+
+	cartItems := make(map[int]CartItem, 0)
+	for rows.Next() {
+
+		var ci CartItem
+		values, err := rows.Values()
+		if err != nil {
+			return nil, err
+		}
+		ci.OrderId = toInt(values[0])
+		ci.ProductId = toInt(values[1])
+		ci.ProductCode = toString(values[2])
+		ci.Count = toFloat(values[3])
+		ci.ProductName = toString(values[4])
+		ci.ItemPrice = toFloat(values[5])
+
+		cartItems[ci.ProductId] = ci
+	}
+
+	return cartItems, nil
 }

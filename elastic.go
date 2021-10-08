@@ -42,7 +42,7 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 	}
 
 	log.Println(elasticsearch.Version)
-	log.Println(client.Info())
+	log.Debug(client.Info())
 
 	es := ElasticHelper{client}
 
@@ -51,14 +51,25 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 
 func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits []interface{}, totalPages int, err error) {
 
-	operator := query.Operator
-	if operator == "" {
-		operator = "AND"
-	}
-	mustRequirement := map[string]interface{}{
+	mustRequirementAnd := map[string]interface{}{
 		"simple_query_string": map[string]interface{}{
 			"query":            query.Text,
-			"default_operator": operator,
+			"default_operator": "AND",
+			"analyzer":         "russian_min_length_2",
+			"fields": []interface{}{
+				"code^3",
+				"category^5",
+				"name^2",
+				"properties",
+				"description",
+			},
+		},
+	}
+
+	mustRequirementOr := map[string]interface{}{
+		"simple_query_string": map[string]interface{}{
+			"query":            query.Text,
+			"default_operator": "OR",
 			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
 				"code^3",
@@ -70,11 +81,6 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 			"minimum_should_match": "50%",
 		},
 	}
-	/*mustRequirement2 := map[string]interface{}{
-		"query_string": map[string]interface{}{
-			"query": query.Text,
-		},
-	}*/
 
 	filterRequirements := make([]interface{}, 0)
 	if len(query.Category) > 2 {
@@ -118,15 +124,25 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
 				"should": []map[string]interface{}{
-					{"bool": map[string]interface{}{
-						"must":   mustRequirement,
-						"filter": filterRequirements,
-					}},
-					/*					{"bool": map[string]interface{}{
-										"must":   mustRequirement,
-										"filter": filterRequirements,
-									}},*/
+					{
+						"bool": map[string]interface{}{
+							"must":   mustRequirementAnd,
+							"filter": filterRequirements,
+						},
+					},
+					{
+						"query_string": map[string]interface{}{
+							"query": query.Text,
+						},
+					},
+					{
+						"bool": map[string]interface{}{
+							"must":   mustRequirementOr,
+							"filter": filterRequirements,
+						},
+					},
 				},
+				"minimum_should_match": 1,
 			},
 		},
 		"size": strconv.Itoa(itemsPerPage),
@@ -137,7 +153,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 		return nil, 0, fmt.Errorf("Error encoding query: %v", err)
 	}
 
-	log.Println("Quering elastic: ", buf.String())
+	log.Debug("Quering elastic: ", buf.String())
 
 	res, err := es.client.Search(
 		es.client.Search.WithContext(ctx),
@@ -182,13 +198,11 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 	if totalPages*itemsPerPage < total {
 		totalPages++
 	}
-	log.Printf(
-		"[%v] %v hits; %v pages; %v items per page; took: %vms",
-		res.Status(),
-		total,
-		totalPages,
-		itemsPerPage,
-		int(response["took"].(float64)),
+	log.Debug("Status: ", res.Status(),
+		", hits: ", total,
+		", pages: ", totalPages,
+		", items per page:", itemsPerPage,
+		", iTook (ms): ", int(response["took"].(float64)),
 	)
 
 	hits = response["hits"].(map[string]interface{})["hits"].([]interface{})

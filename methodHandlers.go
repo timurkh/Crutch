@@ -17,7 +17,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-const itemsPerPage = 100
+const itemsPerPage = 200
 
 type MethodHandlers struct {
 	auth *AuthMiddleware
@@ -51,6 +51,10 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 			return err
 		}
 
+		if len(cities) == 0 && userInfo.SupplierId != 0 {
+			cities, err = mh.db.getSupplierCities(r.Context(), userInfo.SupplierId)
+		}
+
 		if len(cities) == 0 {
 			err = fmt.Errorf("Current user does not have any warehouses assigned")
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -68,10 +72,13 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	log.Printf("## Handling search request text=%s, category=%s, code=%s, name=%s, property=%s, page=%v\n", searchQuery.Text, searchQuery.Category, searchQuery.Code, searchQuery.Name, searchQuery.Property, searchQuery.Page)
+	log.Info(fmt.Printf("Handling search request text=%s, category=%s, code=%s, name=%s, property=%s, page=%v\n", searchQuery.Text, searchQuery.Category, searchQuery.Code, searchQuery.Name, searchQuery.Property, searchQuery.Page))
 	totalPages := 0
 	entries := make([]map[string]interface{}, 0)
+	tries := 0
 	for {
+		tries++
+
 		hits, totalPages_, err := mh.es.search(&searchQuery, r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -87,11 +94,13 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 		entries = append(entries, entries_...)
 		totalPages = totalPages_
 
-		if len(entries) > itemsPerPage/2 || searchQuery.Page >= totalPages-1 {
+		if len(entries) > itemsPerPage/10 || searchQuery.Page >= totalPages-1 {
 			break
 		}
 		searchQuery.Page++
 	}
+
+	log.Info("Have done ", tries, " queries to get ", len(entries), " product entries")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -131,6 +140,8 @@ func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interfa
 	log.Debug("Quering details for product_ids ", products_score)
 
 	products, err := mh.db.getProductEntries(ctx, ids, products_score, userInfo, cityId, inStockOnly, supplier)
+
+	log.Debug("Got info for ", len(products), " entries")
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve list of products: %v", err)
@@ -191,33 +202,6 @@ func (mh *MethodHandlers) getResponseEntriesFromElastic(hits []interface{}) []ma
 func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
-
-	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	err = json.NewEncoder(w).Encode(struct {
-		UserInfo
-		Cities []City `json:"cities"`
-	}{userInfo, cities})
-
-	log.Info(userInfo)
-
-	if err != nil {
-		err = fmt.Errorf("Error while preparing json reponse: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	return nil
-
-}
-
-func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Request) error {
-
-	userInfo := mh.auth.getUserInfo(r)
-
 	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -786,4 +770,71 @@ func (mh *MethodHandlers) getOrdersCSVHandler(w http.ResponseWriter, r *http.Req
 	http.ServeFile(w, r, file.Name())
 
 	return nil
+}
+
+func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
+
+	if len(cities) == 0 && userInfo.SupplierId != 0 {
+		cities, err = mh.db.getSupplierCities(r.Context(), userInfo.SupplierId)
+	}
+
+	compareCount, err := mh.db.getCompareItemsCount(r.Context(), userInfo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(struct {
+		UserInfo
+		Cities            []City `json:"cities"`
+		CompareItemsCount int    `json:"compareItemsCount"`
+	}{userInfo, cities, compareCount})
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+
+}
+
+func (mh *MethodHandlers) getCartContent(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+	cartNumbers, err := mh.db.getCartNumbers(r.Context(), userInfo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	cartItems, err := mh.db.getCartItems(r.Context(), userInfo)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(struct {
+		CartNumbers
+		CartItems map[int]CartItem `json:"cartItems"`
+	}{*cartNumbers, cartItems})
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+
 }

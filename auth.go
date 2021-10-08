@@ -18,10 +18,15 @@ type UserInfo struct {
 	Email          string `json:"email"`
 	Admin          bool   `json:"admin"`
 	Staff          bool   `json:"staff"`
-	CompanyAdmin   bool   `json:company-admin"`
+	CompanyAdmin   bool   `json:"company_admin"`
 	CanReadOrders  bool   `json:"can_read_orders"`
 	CanReadBuyers  bool   `json:"can_read_buyers"`
 	CanReadSellers bool   `json:"can_read_sellers"`
+	ContractorName string `json:"contractor"`
+	ContractorId   int    `json:"contractor_id"`
+	SupplierName   string `json:"supplier"`
+	SupplierId     int    `json:"supplier_id"`
+	CompareList    string `json:"compare_list"`
 }
 
 type City struct {
@@ -94,7 +99,8 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 
 	log.Info("SessionData: ", jsonSessionData)
 	var sessionData struct {
-		UserID int `json:"_auth_user_id"`
+		UserID      int    `json:"_auth_user_id"`
+		CompareList string `json:"compare_list"`
 	}
 	json.Unmarshal([]byte(jsonSessionData), &sessionData)
 
@@ -110,27 +116,27 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
-/*	if !udi.is_superuser && !udi.is_staff {
-		severstalCompanies := map[int]bool{
-			2:  true,
-			7:  true,
-			8:  true,
-			9:  true,
-			10: true,
-			11: true,
-			12: true,
-			13: true,
-			29: true,
-			43: true,
+	/*	if !udi.is_superuser && !udi.is_staff {
+			severstalCompanies := map[int]bool{
+				2:  true,
+				7:  true,
+				8:  true,
+				9:  true,
+				10: true,
+				11: true,
+				12: true,
+				13: true,
+				29: true,
+				43: true,
+			}
+			if _, found := severstalCompanies[udi.contractor_id]; !found {
+				err = fmt.Errorf("User %v (contractor %v) attempted to use crutch", ui.Id, udi.contractor_id)
+				log.Error(err)
+				http.Error(w, "", http.StatusForbidden)
+				return err
+			}
 		}
-		if _, found := severstalCompanies[udi.contractor_id]; !found {
-			err = fmt.Errorf("User %v (contractor %v) attempted to use crutch", ui.Id, udi.contractor_id)
-			log.Error(err)
-			http.Error(w, "", http.StatusForbidden)
-			return err
-		}
-	}
-*/
+	*/
 
 	ui.Name = udi.first_name + " " + udi.last_name
 	ui.Email = udi.email
@@ -140,6 +146,11 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	ui.CanReadOrders = udi.can_read_orders
 	ui.CanReadBuyers = udi.can_read_buyers
 	ui.CanReadSellers = udi.can_read_sellers
+	ui.ContractorName = udi.contractor_name
+	ui.ContractorId = udi.contractor_id
+	ui.SupplierName = udi.supplier_name
+	ui.SupplierId = udi.supplier_id
+	ui.CompareList = sessionData.CompareList
 
 	if !udi.is_superuser && !udi.verified {
 		err = fmt.Errorf("User %s (%s) is not verified yet", ui.Name, ui.Email)
