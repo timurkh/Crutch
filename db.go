@@ -257,7 +257,7 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 		JOIN product_category pc ON ( pp.category_id = pc.id )
 		JOIN product_suppliercategory psc ON (pp.supplier_category_id = psc.id)
 		JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
-		JOIN (
+		LEFT JOIN (
 			SELECT DISTINCT ON (pm.product_id) pi.image, pm.product_id
 			FROM product_image pi
 				JOIN product_modification pm ON ( pi.modification_id = pm.id )
@@ -778,7 +778,7 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 		}
 
 		contractor_number := toString(values[21])
-		if contractor_number != "" {
+		if contractor_number != "" && len(contractor_number) < 10 {
 			s := "00000000000"
 			s = s + contractor_number
 			contractor_number = s[len(s)-11:]

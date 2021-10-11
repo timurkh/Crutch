@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/elastic/go-elasticsearch/v5"
 )
@@ -22,7 +23,6 @@ type SearchQuery struct {
 	Name        string `json:"name"`
 	Property    string `json:"property"`
 	CityID      int    `json:"cityId"`
-	Operator    string `json:"operator"`
 	InStockOnly bool   `json:"inStock"`
 	Supplier    string `json:"supplier"`
 }
@@ -49,11 +49,22 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 	return &es, nil
 }
 
+func escapeSpecialSymbols(s string) string {
+	return strings.Replace(
+		strings.Replace(s, "/", "\\/", -1),
+		":", "\\:", -1)
+
+}
+
+func escapeWildcardSymbols(s string) string {
+	return strings.Replace(escapeSpecialSymbols(s), "*", "\\*", -1)
+}
+
 func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits []interface{}, totalPages int, err error) {
 
 	mustRequirementAnd := map[string]interface{}{
 		"simple_query_string": map[string]interface{}{
-			"query":            query.Text,
+			"query":            escapeWildcardSymbols(query.Text),
 			"default_operator": "AND",
 			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
@@ -68,7 +79,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	mustRequirementOr := map[string]interface{}{
 		"simple_query_string": map[string]interface{}{
-			"query":            query.Text,
+			"query":            escapeWildcardSymbols(query.Text),
 			"default_operator": "OR",
 			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
@@ -132,7 +143,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 					},
 					{
 						"query_string": map[string]interface{}{
-							"query": query.Text,
+							"query": escapeSpecialSymbols(query.Text),
 						},
 					},
 					{

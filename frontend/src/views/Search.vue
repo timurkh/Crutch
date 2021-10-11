@@ -239,15 +239,10 @@ export default {
 			return value.replace(/<\/?[^>]+>/ig, " ");
 		},
 		onSearchSubmit() {
-			this.searchQuery.operator = ""
 			this.saveToCookie(this.searchQuery, "supplier")
 			this.saveToCookie(this.searchQuery, "inStockOnly")
 			this.saveToCookie(this.searchQuery, "city")
 			this.searchProducts().then( ()  => {
-				if(this.searchResults===undefined || this.searchResults.length === 0) {
-					this.searchQuery.operator = "OR"
-					this.searchProducts()
-				}
 				history.pushState( JSON.parse(JSON.stringify(this.searchQuery)), this.searchQuery.text, "/" + process.env.VUE_APP_BASE_URL + "/search?" + this.searchQuery.text)  
 			})
 		},

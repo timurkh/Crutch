@@ -526,8 +526,7 @@ func getNums(orderDetail map[string]interface{}) (float64, float64, float64, flo
 	price := orderDetail["price"].(float64)
 	sum := orderDetail["sum"].(float64)
 	nds := orderDetail["nds"].(float64)
-	tax_item := math.Floor(price*nds+0.5) / 100
-	tax := tax_item * count
+	tax := math.Round(sum*nds) / 100
 
 	return count, price, sum, nds, tax
 }

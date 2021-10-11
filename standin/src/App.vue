@@ -297,7 +297,7 @@
 						</label>
 					</div>
 					<input id="searchCategory" type="text" v-model="searchQuery.category" class="search form-control textinput hidden-xs hidden-sm" style="flex:2; margin-left:10px" placeholder="Категория"/>
-					<input id="searchSupplier" type="text" v-model="searchQuery.supplier" class="search form-control textinput hidden-xs hidden-sm" style="flex:2; margin-left:10px;" placeholder="Поставщик" disabled="user.supplierId>0"/>
+					<input id="searchSupplier" type="text" v-model="searchQuery.supplier" class="search form-control textinput hidden-xs hidden-sm" style="flex:2; margin-left:10px;" placeholder="Поставщик" :disabled="user.supplier_id>0"/>
 					<button  type="submit" class="hidden"/>
 				</div>
 			</form>
@@ -491,7 +491,6 @@ export default {
 			return null
 		})
 		const cartItems = computed(()=>{
-			console.log(cartContent.value.cartItems)
 			return cartContent.value.cartItems
 		})
 
@@ -563,7 +562,6 @@ export default {
 			})      
 			.then(res => {
 				this.cartContent = res.data
-				console.log(this.cartContent)
 			})
 			.catch(error => {
 
@@ -582,7 +580,6 @@ export default {
 			return this.options.priceSorting === 'up' || this.options.priceSorting === 'down'
 		},
 		switchSorting() {
-			console.log(this.options.priceSorting)
 			if (this.options.priceSorting == "up") {
 				this.options.priceSorting = "down"
 			}
@@ -723,9 +720,8 @@ export default {
 						"Catalog-Direct-Purchase":1,
 					},
 			})      
-			.then(res => {
+			.then(() => {
 				this.updateCartContent()
-				console.log(res);
 			})
 			.catch(res => {
 				console.log(res);
@@ -766,7 +762,9 @@ export default {
 
 
 .col-code {
-		width:150px;
+	width:150px;
+	text-wrap:normal;
+	word-wrap:break-word
 }
 
 @media (max-width:1199px) {
