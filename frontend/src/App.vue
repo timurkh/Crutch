@@ -18,7 +18,7 @@
 		</div>
 	</nav>
 
-	<div id="app" class="container-fluid p-0 p-md-4">
+	<div id="app" class="container-fluid p-0 p-md-2">
     <div v-if="error_message.length > 0" class="alert alert-danger mx-1 my-2 p-1 text-wrap text-break" role="alert">
       {{ error_message }}
     </div>
@@ -47,6 +47,50 @@
 #nav a.router-link-exact-active {
   color: #42b983;
 }
+
+.multiselect {
+  min-height: 0px !important;
+}
+
+.multiselect__tags {
+	padding: 4px 30px 0 4px !important;
+	border: 1px solid #ced4da !important;
+	min-height: 38px !important;
+}
+
+.multiselect__select {
+  margin-bottom: 0px !important;
+  margin-top: 0px !important;
+  height: 30px !important;
+}
+
+.multiselect__placeholder, .multiselect__single {
+  margin-top: 0px !important;
+  margin-bottom: 0px !important;
+	padding-top: 0px !important;
+	padding-bottom: 0px !important;
+}
+
+@media (max-width:1620px) {
+  * {
+    font-size: 0.9rem;
+  }
+	#app [class^="multiselect"] {
+		font-size: 0.9rem !important;	
+	}
+	#app .form-control {
+		font-size: 0.9rem !important;	
+	}
+	#app .btn {
+		font-size: 0.9rem !important;	
+	}
+	.multiselect__tags {
+		padding: 4px 30px 0 4px !important;
+		border: 1px solid #ced4da !important;
+		min-height: calc(1.5em + .75rem + 2px) !important;
+	}
+}
+
 </style>
 
 <script>

@@ -9,7 +9,7 @@
 
 	<form v-on:submit.prevent="onSearchSubmit" class="form-horizontal">
 		<div class="d-flex flex-wrap">
-			<div class="d-flex form-inline py-0 m-1">
+			<div class="form-inline py-0 m-1">
 				<VueMultiselect v-model="searchQuery.city" 
 					:options="user.cities" 
 					:multiple="false" 
@@ -21,34 +21,31 @@
 					placeholder="Город">
 				</VueMultiselect>
 			</div>
-			<div class="form-inline p-0 mx-1">
-				<input class="form-check-input" v-model="searchQuery.inStockOnly" type="checkbox" value="" id="flexCheckDefault">
-				<label class="form-check-label" for="flexCheckDefault">
+			<div class="form-inline form-check p-0 m-1" style="min-width:6em;">
+				<input class="" v-model="searchQuery.inStockOnly" type="checkbox" value="" id="checkAvailable">
+				<label class="form-check-label m-1"  for="checkAvailable">
 					В наличии
 				</label>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 mx-1">
-				<input v-model="searchQuery.text" type="text" id="search-input" placeholder="Продукт" class="form-control flex-fill">
+			<div class="form-inline flex-grow-1 p-0 m-1">
+				<input v-model="searchQuery.text" type="text" id="search-input" placeholder="Продукт" style="min-width:200px;" class="form-control flex-fill">
 			</div>
-			<div class="ml-auto p-1 mb-0">
+			<div class="ml-auto pr-1 mb-0">
 				<button class="btn btn-info my-1" :disabled="searchButtonDisabled">Найти!</button>
 			</div>
 		</div>
 		
-		<div class="d-flex flex-wrap">
-			<div class="form-inline p-1 pb-0 pr-0">
+		<div class="d-flex flex-wrap form-inline">
+			<div class="p-1 pb-0 pr-0">
 				<input id="searchCategory" v-model="searchQuery.category" class="form-control m-0" style="width:100%" placeholder="Категория"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 mx-1">
-				<input id="searchCode" v-model="searchQuery.code" class="form-control m-0" style="width:100%" placeholder="Артикул"/>
-			</div>
-			<div class="form-inline flex-grow-1 p-0 mx-1">
+			<div class="flex-grow-1 p-0 m-1">
 				<input id="searchName" v-model="searchQuery.name" class="form-control m-0" style="width:100%" placeholder="Название"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 mx-1">
+			<div class="flex-grow-1 p-0 m-1">
 				<input id="searchProperty" v-model="searchQuery.property" class="form-control m-0" style="width:100%" placeholder="Свойства"/>
 			</div>
-			<div class="form-inline flex-grow-1 p-0 mx-1">
+			<div class="flex-grow-1 p-0 m-1">
 				<input id="searchSupplier" v-model="searchQuery.supplier" class="form-control m-0" style="width:100%" placeholder="Поставщик"/>
 			</div>
 		</div>
@@ -58,7 +55,7 @@
 	<div class="table-responsive-lg p-0 pr-1 mr-1">
 		<table class="table table-sm table-striped table-borderless m-1" ref="productsTable">
 			<thead class="thead-dark text-truncate">
-				<tr class="d-flex text-wrap">
+				<tr class="text-wrap d-none d-sm-block">
 					<th v-if="devMode" class="col-1">Score</th>
 					<th v-if="devMode" class="col-1">Категория</th>
 					<th v-else class="col-2">Категория</th>
@@ -75,9 +72,21 @@
 					</th>
 					<th class="col-2 pr-1">Поставщик</th>
 				</tr>
+				<tr class="d-flex text-wrap d-block d-sm-none">
+					<th class="col-5">Название</th>
+					<th class="col-2">Остаток</th>
+					<th class="col-2" role="button" @click="switchSorting">
+						<div class="d-flex flex-row">
+							<div>Цена (без НДС) </div>
+							<div v-if="(priceSorting==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(priceSorting==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+						</div>
+					</th>
+					<th class="col-3 pr-1">Поставщик</th>
+				</tr>
 			</thead>
 			<tbody > 
-				<tr class="d-flex text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
+				<tr class="text-wrap text-break d-none d-sm-block" v-for="(product, index) in searchResults" :key="index">
 
 					<td v-if="devMode" class="col-1 "> {{product.score}}</td>
 					<td v-if="devMode" class="col-1 "> {{product.category}}</td>
@@ -88,6 +97,14 @@
 					<td class="col-1 "> {{product.rest}} </td>
 					<td class="col-1 "> {{product.price}} </td>
 					<td class="col-2 "> {{product.supplier}} </td>
+
+				</tr>
+				<tr class="text-wrap text-break d-block d-sm-none" v-for="(product, index) in searchResults" :key="index">
+
+					<td class="col-5 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
+					<td class="col-2 "> {{product.rest}} </td>
+					<td class="col-2 "> {{product.price}} </td>
+					<td class="col-3 "> {{product.supplier}} </td>
 
 				</tr>
 			</tbody>
@@ -103,7 +120,8 @@
 	</div>
 </template>
 
-<style src="vue-multiselect/dist/vue-multiselect.css">
+<style src="vue-multiselect/dist/vue-multiselect.css"/>
+<style>
 .form-control::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
             color: #999999;
             opacity: 1; /* Firefox */

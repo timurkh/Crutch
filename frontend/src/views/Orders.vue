@@ -5,14 +5,14 @@
 
 
 	<form class="form-horizontal" @submit.prevent>
-		<div class="d-flex flex-wrap m-1 mb-2">
-			<div class="form-inline font-weight-bold mb-1">
+		<div class="d-flex flex-wrap m-1 mb-2 justify-content-end">
+			<div class="form-inline font-weight-bold mb-1  mr-5 mr-sm-0">
 				{{totalOrders}} {{declOfNum(totalOrders, ["заказ", "заказа", "заказов"])}}, {{totalSum}} руб
 			</div>
-			<div class="form-inline flex-grow-1 mx-1 p-0">
+			<div class="form-inline flex-grow-1 m-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
-			<div class="d-flex form-inline py-0 m-0" style="min-width: 120px;height:2.5rem">
+			<div class="d-flex form-inline py-0 m-0" style="min-width:120px;">
 				<VueMultiselect v-model="selectedStatuses" 
 					:options="statuses" 
 					:multiple="true" 
@@ -26,8 +26,8 @@
 				<template v-slot:selection="{ values, isOpen }"><span class="multiselect__single" v-if="values.length > 0 || isOpen">{{ values.length }} {{declOfNum(values.length, ["статус", "статуса", "статусов"])}} {{declOfNum(values.length, ["выбран", "выбрано", "выбрано"])}}</span></template>
 				</VueMultiselect>
 			</div>
-			<div class="form-inline mx-1">
-				<div class="d-flex justify-center items-center" style="min-width: 145px">
+			<div class="form-inline m-1">
+				<div class="d-flex justify-center items-center" style="min-width:145px">
 					<VueMultiselect 
 						id="dateColumn"
 						v-model="dateColumn" 
@@ -43,12 +43,12 @@
 					</VueMultiselect>
 				</div>
 			</div>
-			<div class="form-inline mx-1">
+			<div class="form-inline m-1 d-none d-sm-block">
 				<div class="d-flex justify-center items-center">
 					<label for="filterStart" class="mx-1">с</label> 
-					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange" :disabled="dateColumn.id === ''"/> 
+					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange" :disabled="dateColumn.id === ''" style="width:10em;padding-right:2px;"/> 
 					<label for="filterEnd" class="mx-1">по</label> 
-					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange" :disabled="dateColumn.id === ''"/>
+					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange" :disabled="dateColumn.id === ''" style="width:10em;padding-right:2px;"/>
 				</div>
 			</div>
 			<div class="d-flex form-inline mr-1 dropleft">
@@ -65,7 +65,7 @@
 				</div>
 			</div>
 			<div class="d-flex form-inline">
-				<button type="button" class="btn btn-success" @click="exportExcel" :disabled="gettingExcel">
+				<button type="button" class="btn btn-success px-1" @click="exportExcel" :disabled="gettingExcel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-excel" viewBox="0 0 16 16">
 <path d="M5.18 4.616a.5.5 0 0 1 .704.064L8 7.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 8l2.233 2.68a.5.5 0 0 1-.768.64L8 8.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 8 5.116 5.32a.5.5 0 0 1 .064-.704z"></path>
 <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"></path>
@@ -76,15 +76,15 @@
 	</form>
 
 
-	<div class="table-responsive-lg p-0 pr-1 mr-1">
+	<div class="tablv-else e-responsive-lg p-0 pr-1 mr-1">
 		<table id="ordersTable" class="table table-sm m-1 text-xsmall" ref="ordersTable">
 			<thead class="thead-dark text-truncate">
-				<tr class="d-flex text-wrap text-break">
+				<tr v-if="$windowWidth > 550" class="d-flex text-wrap text-break">
 					<th class="col-1 text-left">
 							#
 					</th>
 					<th class="col-6 text-left">
-						<tr class="d-flex table-borderless m-0 p-0">
+						<tr class="table-borderless m-0 p-0">
 							<td class="col-3 text-left m-0 p-0">Закупщик</td>
 							<td class="col-3 text-left m-0 p-0">Покупатель</td>
 							<td class="col-3 text-left m-0 p-0">Грузополучатель</td>
@@ -92,20 +92,28 @@
 						</tr>
 					</th>
 					<th class="col-5 text-left">
-						<tr class="d-flex table-borderless m-0 p-0">
-							<th class="col-2 m-0 p-0">Cумма</th>
-							<th class="col-2 m-0 p-0">Статус</th>
-							<td class="col-2 m-0 p-0">Создан</td>
-							<td class="col-2 m-0 p-0">Согласован</td>
-							<td class="col-2 m-0 p-0">Дата поставки</td>
-							<td class="col-2 m-0 p-0">Доставлен</td>
+						<tr class="d-flex table-borderless">
+							<th class="col-2 p-0">Cумма</th>
+							<th class="col-2 p-0">Статус</th>
+							<td class="col-2 p-0">Создан</td>
+							<td class="col-2 p-0">Согласован</td>
+							<td class="col-2 p-0">Дата поставки</td>
+							<td class="col-2 p-0">Доставлен</td>
 						</tr>
 					</th>
+				</tr>
+				<tr v-else class="d-flex text-wrap text-break">
+					<th class="col-1 text-left"> # </th>
+					<th class="col-3 text-left m-0 p-0">Закупщик</th>
+					<th class="col-2 text-left m-0 p-0">Покупатель</th>
+					<th class="col-2 text-left m-0 p-0">Поставщик</th>
+					<th class="col-2 p-0">Cумма</th>
+					<th class="col-2 p-0">Статус</th>
 				</tr>
 			</thead>
 			<tbody> 
 				<div v-for="(order, index) in orders" :key="index">
-					<tr data-toggle="collapse" role="button" :data-target="'#order' + index" class="accordion-toggle d-flex text-wrap text-break" @click="toggleDetails" :id="order.id">
+					<tr v-if="$windowWidth > 550" data-toggle="collapse" role="button" :data-target="'#order' + index" class="d-flex accordion-toggle text-wrap text-break" @click="toggleDetails" :id="order.id">
 						<td class="col-1 text-left">
 								{{order.id}} {{order.contractor_number}}
 						</td>
@@ -128,8 +136,16 @@
 							</tr>
 						</td>
 					</tr>
+					<tr v-else data-toggle="collapse" role="button" :data-target="'#order' + index" class="accordion-toggle text-wrap text-break" @click="toggleDetails" :id="order.id">
+						<td class="col-1 text-left"> <span class="d-none d-sm-block">{{order.id}}</span> {{order.contractor_number}} </td>
+						<td class="col-3 text-left m-0 p-0">{{order.buyer}}</td>
+						<td class="col-2 text-left m-0 p-0">{{order.customer_name}}</td>
+						<td class="col-2 text-left m-0 p-0">{{order.seller_name}}</td>
+						<td class="col-2 m-0 p-0">{{order.sum}}</td>
+						<td class="col-2 m-0 p-0">{{order.status}}</td>
+					</tr>
 					<div class="accordian-body collapse" :id="'order' + index"> 
-						<th class="d-flex text-wrap text-break table-borderless">
+						<th v-if="$windowWidth > 550" class="d-flex text-wrap text-break table-borderless">
 							<td class="col-1"></td>
 							<td class="col-3 text-left">Товар</td>
 							<td class="col-1">Количество</td>
@@ -138,15 +154,29 @@
 							<td class="col-2 text-left">Комментарий</td>
 							<td class="col-1">Склад</td>
 						</th>
-						<tr class="d-flex text-wrap text-break table-borderless small" v-for="(oi, index) in order_details[order.id]" :key="index">
+						<th v-else class="d-flex text-wrap text-break table-borderless">
 							<td class="col-1"></td>
-							<td class="col-3 text-left">{{oi.name}}</td>
-							<td class="col-1">{{oi.count}}</td>
-							<td class="col-2">{{oi.price}}</td>
-							<td class="col-1">{{oi.nds}}</td>
-							<td class="col-2 text-left">{{oi.comment}}</td>
-							<td class="col-1">{{oi.warehouse}}</td>
-						</tr>
+							<td class="col-5 text-left">Товар</td>
+							<td class="col-3">Количество</td>
+							<td class="col-3">Цена (без НДС)</td>
+						</th>
+						<div v-for="(oi, index) in order_details[order.id]" :key="index">
+							<tr v-if="$windowWidth > 550" class="d-flex text-wrap text-break table-borderless small">
+								<td class="col-1"></td>
+								<td class="col-3 text-left">{{oi.name}}</td>
+								<td class="col-1">{{oi.count}}</td>
+								<td class="col-2">{{oi.price}}</td>
+								<td class="col-1">{{oi.nds}}</td>
+								<td class="col-2">{{oi.comment}}</td>
+								<td class="col-1">{{oi.warehouse}}</td>
+							</tr>
+							<tr v-else class="text-wrap text-break table-borderless small">
+								<td class="col-1"></td>
+								<td class="col-5 text-left">{{oi.name}}</td>
+								<td class="col-3">{{oi.count}}</td>
+								<td class="col-3">{{oi.price}}</td>
+							</tr>
+						</div>
 					</div> 
 				</div>
 			</tbody>
@@ -163,24 +193,26 @@
 
 </template>
 
-<style src="vue-multiselect/dist/vue-multiselect.css">
-</style>
+<style src="vue-multiselect/dist/vue-multiselect.css"/>
 
 <script>
 	import axios from 'axios'
 	axios.defaults.baseURL = '/' + process.env.VUE_APP_BASE_URL
+
 	import moment from 'moment'
 	moment.updateLocale('en', {
 			week : {
 					dow :0  // 0 to 6 sunday to saturday
 			}
 	});
+
 	import VueMultiselect from 'vue-multiselect'
-function doubleRaf (callback) {
-	requestAnimationFrame(() => {
-		requestAnimationFrame(callback)
-	})
-}
+
+	function doubleRaf (callback) {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(callback)
+		})
+	}
 
 
 

@@ -5,14 +5,14 @@
 
 
 	<form class="form-horizontal" @submit.prevent>
-		<div class="d-flex flex-nowrap m-1 mb-2">
-			<div class="form-inline font-weight-bold m-0 p-0">
+		<div class="d-flex flex-wrap m-1 mb-2 justify-content-end">
+			<div class="form-inline font-weight-bold mb-1 mr-5 p-0 mr-sm-0">
 				{{summary}}
 			</div>
-			<div class="form-inline flex-grow-1 mx-1 p-0">
+			<div class="form-inline flex-grow-1 m-1 p-0">
 					<input type="text my-0" class="flex-fill form-control" v-model="filter.text" @change="onChange"/>
 			</div>
-			<div class="form-inline align-self-center py-0 m-0" style="min-width: 119px;height:2.5rem">
+			<div class="form-inline align-self-center py-0 m-0" style="min-width:120px;">
 				<VueMultiselect v-model="filter.role" 
 					:options="roles" 
 					:multiple="false" 
@@ -25,17 +25,17 @@
 					placeholder="Роль">
 				</VueMultiselect>
 			</div>
-			<div class="form-inline ml-1 p-0">
-				<input class="form-control" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
-				<label class="form-check-label mx-1" for="haveOrders">
+			<div class="form-inline form-check m-1 p-0">
+				<input class="" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
+				<label class="form-check-label m-1" for="haveOrders">
 					Есть заказы
 				</label>
 			</div>
-			<div class="form-inline ml-0 mr-1">
-				<div class="d-flex justify-center items-center">
-					<label for="filterStart" class="mr-1 ml-0">с</label> 
+			<div class="form-inline m-1 d-none d-sm-block">
+				<div class="d-flex justify-center items-center ">
+					<label for="filterStart" class="mr-1 ml-0 my-1">с</label> 
 					<input id="filterStart" class="form-control" v-model="filterStart" type="date" @change="onChange"/>
-					<label for="filterEnd" class="mx-1">по</label> 
+					<label for="filterEnd" class="m-1">по</label> 
 					<input id="filterEnd" class="form-control" v-model="filterEnd" type="date" @change="onChange"/>
 				</div>
 			</div>
@@ -53,7 +53,7 @@
 				</div>
 			</div>
 			<div class="d-flex form-inline">
-				<button type="button" class="btn btn-success" @click="exportExcel" :disabled="gettingExcel">
+				<button type="button" class="btn btn-success px-1" @click="exportExcel" :disabled="gettingExcel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-excel" viewBox="0 0 16 16">
 <path d="M5.18 4.616a.5.5 0 0 1 .704.064L8 7.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 8l2.233 2.68a.5.5 0 0 1-.768.64L8 8.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 8 5.116 5.32a.5.5 0 0 1 .064-.704z"></path>
 <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"></path>
@@ -67,7 +67,7 @@
 	<div class="table-responsive-lg p-0 pr-1 mr-1">
 		<table id="ordersTable" class="table table-sm m-1 text-xsmall" ref="ordersTable">
 			<thead class="thead-dark text-truncate">
-				<tr class="d-flex text-wrap text-break">
+				<tr v-if="$windowWidth > 550" class="d-flex text-wrap text-break">
 					<th class="col-4 text-left">
 						<tr class="d-flex table-borderless m-0 p-0">
 							<td class="col-1 text-left m-0 p-0"> # </td>
@@ -81,8 +81,8 @@
 					<th class="col-1" role="button" @click="switchSorting('user_count')">
 						<div class="d-flex flex-row">
 							<div>Пользователей</div>
-							<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
-							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 						</div>
 					</th>
 					<th class="col-3 text-left">
@@ -90,31 +90,57 @@
 							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('date_joined')">
 								<div class="d-flex flex-row">
 									<div>Присоединился</div>
-									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
-									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 								</div>
 							</td>
 							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('last_login')">
 								<div class="d-flex flex-row">
 									<div>Появлялся</div>
-									<div v-if="(sortingColumn==='last_login' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
-									<div v-if="(sortingColumn==='last_login' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 								</div>
 							</td>
 							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('order_count')">
 								<div class="d-flex flex-row">
 									<div>Заказов</div>
-									<div v-if="(sortingColumn==='order_count' && sortingDirection==='up')" class="mx-1"><i class="fas fa-sort-up"></i></div>
-									<div v-if="(sortingColumn==='order_count' && sortingDirection==='down')" class="mx-1"><i class="fas fa-sort-down"></i></div>
+									<div v-if="(sortingColumn==='order_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='order_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 								</div>
 							</td>
 						</tr>
 					</th>
 				</tr>
+				<tr v-else class="d-flex text-wrap text-break">
+					<th class="col-1 text-left"> # </th>
+					<th class="col-3 text-left">Название</th>
+					<th class="col-2">Роль</th>
+					<th class="col-2" role="button" @click="switchSorting('user_count')">
+						<div class="d-flex flex-row">
+							<div>Пользователей</div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+						</div>
+					</th>
+					<th class="col-2" role="button" @click="switchSorting('date_joined')">
+						<div class="d-flex flex-row">
+							<div>Присоединился</div>
+							<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+						</div>
+					</th>
+					<th class="col-2" role="button" @click="switchSorting('order_count')">
+						<div class="d-flex flex-row">
+							<div>Заказов</div>
+							<div v-if="(sortingColumn==='order_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='order_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+						</div>
+					</th>
+				</tr>
 			</thead>
 			<tbody v-if="!loading"> 
 				<div v-for="(cp, index) in counterparts" :key="index">
-					<tr class="d-flex text-wrap text-break" :id="cp.id">
+					<tr v-if="$windowWidth > 550" class="d-flex text-wrap text-break" :id="cp.id">
 						<td class="col-4 text-left" :id="cp.id">
 							<tr class="d-flex table-borderless m-0 p-0" :id="cp.id">
 								<td class="col-1 text-left m-0 p-0"> {{cp.id}} </td>
@@ -134,6 +160,14 @@
 							</tr>
 						</td>
 					</tr>
+					<tr v-else class="d-flex text-wrap text-break" :id="cp.id">
+						<td class="col-1 text-left"> {{cp.id}} </td>
+						<td class="col-3 text-left">{{cp.name}}</td>
+						<td class="col-2">{{cp.role}}</td>
+						<td class="col-2">{{cp.user_count}}</td>
+						<td class="col-2">{{formatDateOnly(cp.date_joined)}}</td>
+						<td class="col-2">{{cp.order_count}}</td>
+					</tr>
 				</div>
 			</tbody>
 		</table>
@@ -149,7 +183,12 @@
 
 </template>
 
-<style src="vue-multiselect/dist/vue-multiselect.css">
+<style src="vue-multiselect/dist/vue-multiselect.css"/>
+<style>
+.multiselect__tags {
+    padding: 6px 38px 0 6px !important;
+		border: 1px solid #ced4da !important;
+}
 </style>
 
 <script>
