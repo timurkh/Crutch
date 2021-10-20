@@ -55,7 +55,7 @@
 	<div class="table-responsive-lg p-0 pr-1 mr-1">
 		<table class="table table-sm table-striped table-borderless m-1" ref="productsTable">
 			<thead class="thead-dark text-truncate">
-				<tr class="text-wrap d-none d-sm-block">
+				<tr v-if="$windowWidth > 550" class="d-flex text-wrap">
 					<th v-if="devMode" class="col-1">Score</th>
 					<th v-if="devMode" class="col-1">Категория</th>
 					<th v-else class="col-2">Категория</th>
@@ -72,7 +72,7 @@
 					</th>
 					<th class="col-2 pr-1">Поставщик</th>
 				</tr>
-				<tr class="d-flex text-wrap d-block d-sm-none">
+				<tr v-else class="d-flex text-wrap">
 					<th class="col-5">Название</th>
 					<th class="col-2">Остаток</th>
 					<th class="col-2" role="button" @click="switchSorting">
@@ -86,27 +86,31 @@
 				</tr>
 			</thead>
 			<tbody > 
-				<tr class="text-wrap text-break d-none d-sm-block" v-for="(product, index) in searchResults" :key="index">
+				<div v-if="$windowWidth > 550">
+					<tr class="d-flex text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
 
-					<td v-if="devMode" class="col-1 "> {{product.score}}</td>
-					<td v-if="devMode" class="col-1 "> {{product.category}}</td>
-					<td v-else class="col-2 "> {{product.category}}</td>
-					<td class="col-2 "> {{product.code}} </td>
-					<td class="col-2 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
-					<td class="col-2 " data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
-					<td class="col-1 "> {{product.rest}} </td>
-					<td class="col-1 "> {{product.price}} </td>
-					<td class="col-2 "> {{product.supplier}} </td>
+						<td v-if="devMode" class="col-1 "> {{product.score}}</td>
+						<td v-if="devMode" class="col-1 "> {{product.category}}</td>
+						<td v-else class="col-2 "> {{product.category}}</td>
+						<td class="col-2 "> {{product.code}} </td>
+						<td class="col-2 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
+						<td class="col-2 " data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
+						<td class="col-1 "> {{product.rest}} </td>
+						<td class="col-1 "> {{product.price}} </td>
+						<td class="col-2 "> {{product.supplier}} </td>
 
-				</tr>
-				<tr class="text-wrap text-break d-block d-sm-none" v-for="(product, index) in searchResults" :key="index">
+					</tr>
+				</div>
+				<div v-else>
+					<tr class="text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
 
-					<td class="col-5 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
-					<td class="col-2 "> {{product.rest}} </td>
-					<td class="col-2 "> {{product.price}} </td>
-					<td class="col-3 "> {{product.supplier}} </td>
+						<td class="col-5 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
+						<td class="col-2 "> {{product.rest}} </td>
+						<td class="col-2 "> {{product.price}} </td>
+						<td class="col-3 "> {{product.supplier}} </td>
 
-				</tr>
+					</tr>
+				</div>
 			</tbody>
 		</table>
 	</div>

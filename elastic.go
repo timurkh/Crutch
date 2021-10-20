@@ -50,9 +50,12 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 }
 
 func escapeSpecialSymbols(s string) string {
-	return strings.Replace(
-		strings.Replace(s, "/", "\\/", -1),
-		":", "\\:", -1)
+	special_symbols := []string{"\\", "+", "-", "&", "|", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "/", "~", "*", "?", ":"}
+	for _, sym := range special_symbols {
+		s = strings.Replace(s, sym, "\\"+sym, -1)
+	}
+
+	return s
 
 }
 

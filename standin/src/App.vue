@@ -90,7 +90,7 @@
 								<ul class="dropdown-menu">
 									<li id="analytics_menu_item">
 										<a href="/analytics/">
-											<i class="fa fa-line-chart"></i> Аstyle="налитика
+											<i class="fas fa-chart-line"></i> Аналитика
 										</a>
 									</li>
 									<li>
@@ -431,6 +431,7 @@ import { ref, computed } from 'vue'
 import {VueCookieNext} from 'vue-cookie-next'
 import 'v-tooltip/dist/v-tooltip.css'
 import VueMultiselect from 'vue-multiselect'
+import 'uri'
 
 var baseUrl = '/' + process.env.VUE_APP_BASE_URL
 
@@ -534,10 +535,10 @@ export default {
       vars.forEach(function(v) {
         tmp = v.split('=');
         if(tmp.length == 2)
-          getVars[tmp[0]] = decodeURIComponent(tmp[1]);
+          getVars[tmp[0]] = decodeURIComponent(tmp[1].replaceAll('+', '%20'));
       });
 			if (getVars.query != undefined)
-				this.searchQuery.text = getVars.query.replace('+', ' ')
+				this.searchQuery.text = getVars.query
     }
 
 		this.updateCartContent()

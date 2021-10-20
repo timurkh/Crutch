@@ -637,7 +637,7 @@ func (db *DBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersF
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
-		WHERE oo.status_id NOT IN (17) AND seller.object_id!=1`
+		WHERE oo.status_id NOT IN (17) AND oo.deleted=FALSE AND seller.object_id!=1`
 
 	// filter by access rights
 	filter, args := db.getOrdersFilterQuery(userInfo, ordersFilter)
@@ -715,7 +715,7 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
-		WHERE oo.status_id NOT IN (17) AND seller.object_id!=1`
+		WHERE oo.status_id NOT IN (17) AND oo.deleted = FALSE AND seller.object_id!=1`
 
 	// filter by access rights
 	filter, args := db.getOrdersFilterQuery(userInfo, ordersFilter)

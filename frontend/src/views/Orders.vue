@@ -84,7 +84,7 @@
 							#
 					</th>
 					<th class="col-6 text-left">
-						<tr class="table-borderless m-0 p-0">
+						<tr class="d-flex table-borderless m-0 p-0">
 							<td class="col-3 text-left m-0 p-0">Закупщик</td>
 							<td class="col-3 text-left m-0 p-0">Покупатель</td>
 							<td class="col-3 text-left m-0 p-0">Грузополучатель</td>
