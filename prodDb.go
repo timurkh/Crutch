@@ -31,11 +31,11 @@ type OrdersFilter struct {
 	ItemsPerPage     int       `schema:"itemsPerPage"`
 }
 
-type DBHelper struct {
+type ProdDBHelper struct {
 	pool *pgxpool.Pool
 }
 
-func initDBHelper(host string, user string, password string, database string) (*DBHelper, error) {
+func initProdDBHelper(host string, user string, password string, database string) (*ProdDBHelper, error) {
 	url := "postgres://" + user + ":" + password + "@" + host + "/" + database
 	conf, err := pgxpool.ParseConfig(url)
 	if err != nil {
@@ -49,7 +49,7 @@ func initDBHelper(host string, user string, password string, database string) (*
 		return nil, err
 	}
 
-	db := DBHelper{pool}
+	db := ProdDBHelper{pool}
 	return &db, nil
 }
 
@@ -71,7 +71,7 @@ type UserDBInfo struct {
 	supplier_name    string
 }
 
-func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
+func (db *ProdDBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 	ui := UserDBInfo{}
 	err := db.pool.QueryRow(context.Background(), `
 		SELECT first_name, 
@@ -105,7 +105,7 @@ func (db *DBHelper) getUserInfo(userId int) (*UserDBInfo, error) {
 
 }
 
-func (db *DBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInfo) (cities []City, err error) {
+func (db *ProdDBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInfo) (cities []City, err error) {
 
 	var rows pgx.Rows
 
@@ -128,7 +128,7 @@ func (db *DBHelper) getUserConsigneeCities(ctx context.Context, userInfo UserInf
 	return cities, rows.Err()
 }
 
-func (db *DBHelper) getSupplierCities(ctx context.Context, supplierId int) (cities []City, err error) {
+func (db *ProdDBHelper) getSupplierCities(ctx context.Context, supplierId int) (cities []City, err error) {
 
 	var rows pgx.Rows
 
@@ -152,7 +152,7 @@ func (db *DBHelper) getSupplierCities(ctx context.Context, supplierId int) (citi
 	return cities, rows.Err()
 }
 
-func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []map[string]interface{}, err error) {
+func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []map[string]interface{}, err error) {
 
 	args := []interface{}{product_ids}
 
@@ -391,7 +391,7 @@ func toTime(v interface{}) string {
 	return ""
 }
 
-func (db *DBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, filter CounterpartsFilter) (counterparts []map[string]interface{}, err error) {
+func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, filter CounterpartsFilter) (counterparts []map[string]interface{}, err error) {
 
 	args := make([]interface{}, 0)
 	dateFilter := ""
@@ -566,7 +566,7 @@ func (db *DBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, filt
 	return counterparts, rows.Err()
 }
 
-func (db *DBHelper) ordersAccessRightsFilter(userInfo UserInfo) (string, []interface{}) {
+func (db *ProdDBHelper) ordersAccessRightsFilter(userInfo UserInfo) (string, []interface{}) {
 	filterUsers := ""
 	args := make([]interface{}, 0)
 	if !userInfo.Admin && !(userInfo.Staff && userInfo.CanReadOrders) {
@@ -593,7 +593,7 @@ func (db *DBHelper) ordersAccessRightsFilter(userInfo UserInfo) (string, []inter
 	return filterUsers, args
 }
 
-func (db *DBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersFilter) (filter string, args []interface{}) {
+func (db *ProdDBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersFilter) (filter string, args []interface{}) {
 
 	// filter by access rights
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
@@ -642,7 +642,7 @@ func (db *DBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter OrdersF
 	return filter, args
 }
 
-func (db *DBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (count int, sum float64, err error) {
+func (db *ProdDBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (count int, sum float64, err error) {
 
 	queryOrders := `
 		SELECT 
@@ -682,7 +682,7 @@ func (db *DBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersF
 	return count, sum, err
 }
 
-func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []map[string]interface{}, err error) {
+func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []map[string]interface{}, err error) {
 
 	queryOrders := `
 		SELECT oo.id, 
@@ -840,7 +840,7 @@ func (db *DBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilt
 	return orders, rows.Err()
 }
 
-func (db *DBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (orders []map[string]interface{}, err error) {
+func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (orders []map[string]interface{}, err error) {
 
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
 
@@ -932,7 +932,7 @@ func (db *DBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int
 	return orderDetails, rows.Err()
 }
 
-func (db *DBHelper) getOrdersCSV(ctx context.Context, userInfo UserInfo, file *os.File) error {
+func (db *ProdDBHelper) getOrdersCSV(ctx context.Context, userInfo UserInfo, file *os.File) error {
 
 	queryOrders := `
 		SELECT 
@@ -1069,7 +1069,7 @@ type CartNumbers struct {
 	ItemsCount  int     `json:"itemsCount"`
 }
 
-func (db *DBHelper) getCartNumbers(ctx context.Context, ui UserInfo) (*CartNumbers, error) {
+func (db *ProdDBHelper) getCartNumbers(ctx context.Context, ui UserInfo) (*CartNumbers, error) {
 	cn := CartNumbers{}
 	err := db.pool.QueryRow(ctx, `
 		SELECT COUNT(DISTINCT oo.id) AS orders_count, COALESCE(SUM(items_discounted_price), 0) as total_sum, COUNT(oi.id) AS items_count FROM order_order oo
@@ -1109,7 +1109,7 @@ func (db *DBHelper) getCartNumbers(ctx context.Context, ui UserInfo) (*CartNumbe
 
 }
 
-func (db *DBHelper) getCompareItemsCount(ctx context.Context, ui UserInfo) (int, error) {
+func (db *ProdDBHelper) getCompareItemsCount(ctx context.Context, ui UserInfo) (int, error) {
 	var ci int
 	err := db.pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM compare_comparelist c JOIN compare_compareitem ci ON c.id = ci.compare_id WHERE c.name=$1
@@ -1130,7 +1130,7 @@ type CartItem struct {
 	ItemPrice   float64 `json:"itemPrice"`
 }
 
-func (db *DBHelper) getCartItems(ctx context.Context, ui UserInfo) (map[int]CartItem, error) {
+func (db *ProdDBHelper) getCartItems(ctx context.Context, ui UserInfo) (map[int]CartItem, error) {
 	rows, _ := db.pool.Query(ctx, `
 		SELECT oo.id, product_id, oi.code, count, oi.name, item_discounted_price FROM order_order oo
 			JOIN (

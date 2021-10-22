@@ -46,37 +46,50 @@ func main() {
 
 	port := getEnv("PORT", "3001")
 	baseUrl := getEnv("BASEURL", "crutchdev")
-	elastic := getEnv("ELASTIC", "http://10.130.0.21:9400")
-	db_host := getEnv("DB_HOST", "10.130.0.13:5432")
-	db_user := getEnv("DB_USER", "pguser")
-	db_password := getEnv("DB_PASSWORD", "pgpassword")
-	db_database := getEnv("DB_DATABASE", "optima3_severstal")
 	standinUrl := getEnv("STANDINURL", "standindev")
+
+	elastic := getEnv("ELASTIC", "http://10.130.0.21:9400")
+
+	prodDBHost := getEnv("PROD_DB_HOST", "10.130.0.13:5432")
+	prodDBUser := getEnv("PROD_DB_USER", "pguser")
+	prodDBPswd := getEnv("PROD_DB_PASSWORD", "pgpassword")
+	prodDBDtbs := getEnv("PROD_DB_DATABASE", "optima3_severstal")
+
+	//	crutchDBHost := getEnv("CRUTCH_DB_HOST", "127.0.0.1:5432")
+	//	crutchDBUser := getEnv("CRUTCH_DB_USER", "pguser")
+	//	crutchDBPswd := getEnv("CRUTCH_DB_PASSWORD", "pgpassword")
+	//	crutchDBDtbs := getEnv("CRUTCH_DB_DATABASE", "crutch")
 
 	es, err := initElasticHelper(elastic)
 	if err != nil {
 		log.Fatalf("Failed to init Elastic connection: %v\n", err)
 	}
 
-	db, err := initDBHelper(db_host, db_user, db_password, db_database)
+	prodDB, err := initProdDBHelper(prodDBHost, prodDBUser, prodDBPswd, prodDBDtbs)
 	if err != nil {
 		log.Fatalf("Failed to init DB connection: %v\n", err)
 	}
 
-	auth := initAuthMiddleware(es, db)
-	methods := initMethodHandlers(auth, es, db)
+	//	crutchDB, err := initCrutchDBHelper(crutchDBHost, crutchDBUser, crutchDBPswd, crutchDBDtbs)
+	//	if err != nil {
+	//		log.Fatalf("Failed to init DB connection: %v\n", err)
+	//	}
+
+	auth := initAuthMiddleware(es, prodDB)
+	methods := initMethodHandlers(auth, es, prodDB)
 
 	router := mux.NewRouter().StrictSlash(true)
-	crutchAPI := router.PathPrefix("/" + baseUrl + "/methods").Subrouter()
-	crutchAPI.Use(auth.authMiddleware)
-	crutchAPI.Methods("GET").Path("/counterparts").Handler(appHandler(methods.getCounterpartsHandler))
-	crutchAPI.Methods("GET").Path("/counterparts/excel").Handler(appHandler(methods.getCounterpartsExcelHandler))
-	crutchAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
-	crutchAPI.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
-	crutchAPI.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
-	crutchAPI.Methods("GET").Path("/orders/csv").Handler(appHandler(methods.getOrdersCSVHandler))
-	crutchAPI.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
-	crutchAPI.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
+
+	crutchMethods := router.PathPrefix("/" + baseUrl + "/methods").Subrouter()
+	crutchMethods.Use(auth.authMiddleware)
+	crutchMethods.Methods("GET").Path("/counterparts").Handler(appHandler(methods.getCounterpartsHandler))
+	crutchMethods.Methods("GET").Path("/counterparts/excel").Handler(appHandler(methods.getCounterpartsExcelHandler))
+	crutchMethods.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
+	crutchMethods.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
+	crutchMethods.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
+	crutchMethods.Methods("GET").Path("/orders/csv").Handler(appHandler(methods.getOrdersCSVHandler))
+	crutchMethods.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
+	crutchMethods.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
 	fsCrutch := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //wrapHandler is used to handle history mode URLs

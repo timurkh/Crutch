@@ -20,12 +20,12 @@ import (
 const itemsPerPage = 200
 
 type MethodHandlers struct {
-	auth *AuthMiddleware
-	es   *ElasticHelper
-	db   *DBHelper
+	auth   *AuthMiddleware
+	es     *ElasticHelper
+	prodDB *ProdDBHelper
 }
 
-func initMethodHandlers(auth *AuthMiddleware, es *ElasticHelper, db *DBHelper) *MethodHandlers {
+func initMethodHandlers(auth *AuthMiddleware, es *ElasticHelper, db *ProdDBHelper) *MethodHandlers {
 
 	mh := MethodHandlers{auth, es, db}
 
@@ -44,7 +44,7 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 	var cities []City
 
 	if !userInfo.Admin {
-		cities, err = mh.db.getUserConsigneeCities(r.Context(), userInfo)
+		cities, err = mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
 		if err != nil {
 			err = fmt.Errorf("Failed to get consignee cities: %s", err.Error())
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -52,7 +52,7 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 		}
 
 		if len(cities) == 0 && userInfo.SupplierId != 0 {
-			cities, err = mh.db.getSupplierCities(r.Context(), userInfo.SupplierId)
+			cities, err = mh.prodDB.getSupplierCities(r.Context(), userInfo.SupplierId)
 		}
 
 		if len(cities) == 0 {
@@ -139,7 +139,7 @@ func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interfa
 
 	log.Debug("Quering details for product_ids ", products_score)
 
-	products, err := mh.db.getProductEntries(ctx, ids, products_score, userInfo, cityId, inStockOnly, supplier)
+	products, err := mh.prodDB.getProductEntries(ctx, ids, products_score, userInfo, cityId, inStockOnly, supplier)
 
 	log.Debug("Got info for ", len(products), " entries")
 
@@ -202,7 +202,7 @@ func (mh *MethodHandlers) getResponseEntriesFromElastic(hits []interface{}) []ma
 func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
-	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
+	cities, err := mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -246,7 +246,7 @@ func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.
 
 	log.Info("Getting list of counterparts, filter ", filter)
 
-	counterparts, err := mh.db.getCounterparts(r.Context(), userInfo, filter)
+	counterparts, err := mh.prodDB.getCounterparts(r.Context(), userInfo, filter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -290,7 +290,7 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 
 	log.Info("Getting list of counterparts, filter ", filter)
 
-	counterparts, err := mh.db.getCounterparts(r.Context(), userInfo, filter)
+	counterparts, err := mh.prodDB.getCounterparts(r.Context(), userInfo, filter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -452,7 +452,7 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 
 	log.Info("Getting list of orders, filter ", ordersFilter)
 
-	orders, err := mh.db.getOrders(r.Context(), userInfo, ordersFilter)
+	orders, err := mh.prodDB.getOrders(r.Context(), userInfo, ordersFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -462,7 +462,7 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 
 	if ordersFilter.Page == 0 {
-		count, sum, e := mh.db.getOrdersSum(r.Context(), userInfo, ordersFilter)
+		count, sum, e := mh.prodDB.getOrdersSum(r.Context(), userInfo, ordersFilter)
 		if e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return e
@@ -501,7 +501,7 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 		return err
 	}
 
-	orderDetails, err := mh.db.getOrder(r.Context(), userInfo, orderId)
+	orderDetails, err := mh.prodDB.getOrder(r.Context(), userInfo, orderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -649,7 +649,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	streamWriter.SetRow("A2", columnNames)
 
 	userInfo := mh.auth.getUserInfo(r)
-	orders, err := mh.db.getOrders(r.Context(), userInfo, ordersFilter)
+	orders, err := mh.prodDB.getOrders(r.Context(), userInfo, ordersFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -659,7 +659,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	for _, order := range orders {
 		orderStartRow := row
 
-		orderDetails, err := mh.db.getOrder(r.Context(), userInfo, order["id"].(int))
+		orderDetails, err := mh.prodDB.getOrder(r.Context(), userInfo, order["id"].(int))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return err
@@ -761,7 +761,7 @@ func (mh *MethodHandlers) getOrdersCSVHandler(w http.ResponseWriter, r *http.Req
 
 	defer os.Remove(file.Name())
 
-	mh.db.getOrdersCSV(r.Context(), userInfo, file)
+	mh.prodDB.getOrdersCSV(r.Context(), userInfo, file)
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.csv"))
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -774,13 +774,13 @@ func (mh *MethodHandlers) getOrdersCSVHandler(w http.ResponseWriter, r *http.Req
 func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
-	cities, err := mh.db.getUserConsigneeCities(r.Context(), userInfo)
+	cities, err := mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
 
 	if len(cities) == 0 && userInfo.SupplierId != 0 {
-		cities, err = mh.db.getSupplierCities(r.Context(), userInfo.SupplierId)
+		cities, err = mh.prodDB.getSupplierCities(r.Context(), userInfo.SupplierId)
 	}
 
-	compareCount, err := mh.db.getCompareItemsCount(r.Context(), userInfo)
+	compareCount, err := mh.prodDB.getCompareItemsCount(r.Context(), userInfo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
@@ -808,13 +808,13 @@ func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Reques
 func (mh *MethodHandlers) getCartContent(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
-	cartNumbers, err := mh.db.getCartNumbers(r.Context(), userInfo)
+	cartNumbers, err := mh.prodDB.getCartNumbers(r.Context(), userInfo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
 
-	cartItems, err := mh.db.getCartItems(r.Context(), userInfo)
+	cartItems, err := mh.prodDB.getCartItems(r.Context(), userInfo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err

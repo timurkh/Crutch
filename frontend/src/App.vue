@@ -10,6 +10,7 @@
 				<li class="nav-item"><router-link class="nav-link" to="/">Поиск товаров</router-link></li>
 				<li class="nav-item"><router-link class="nav-link" to="/orders">Заказы</router-link></li>
 				<li v-if="user.admin || user.staff" class="nav-item"><router-link class="nav-link" to="/counterparts">Контрагенты</router-link></li>
+				<li v-if="user.companyAdmin || user.admin" class="nav-item"><router-link class="nav-link" to="/api">API</router-link></li>
 			</ul>
 			<ul class="navbar-nav ml-auto">
 				<li class="nav-item"><hr class="border-top"></li>

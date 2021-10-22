@@ -17,7 +17,12 @@ const routes = [
     path: '/counterparts',
     name: 'Контрагенты',
     component: () => import('../views/Counterparts.vue')
-  }
+  },
+  {
+    path: '/api',
+    name: 'API',
+    component: () => import('../views/API.vue')
+  },
 ]
 
 const router = createRouter({

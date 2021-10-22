@@ -27,6 +27,7 @@ type UserInfo struct {
 	SupplierName   string `json:"supplier"`
 	SupplierId     int    `json:"supplier_id"`
 	CompareList    string `json:"compare_list"`
+	CompanySlug    string `json:"company_slug"`
 }
 
 type City struct {
@@ -36,10 +37,10 @@ type City struct {
 
 type AuthMiddleware struct {
 	es *ElasticHelper
-	db *DBHelper
+	db *ProdDBHelper
 }
 
-func initAuthMiddleware(es *ElasticHelper, db *DBHelper) *AuthMiddleware {
+func initAuthMiddleware(es *ElasticHelper, db *ProdDBHelper) *AuthMiddleware {
 
 	au := AuthMiddleware{es, db}
 

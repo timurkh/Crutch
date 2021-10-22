@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/elastic/go-elasticsearch/v5"
 )
@@ -49,25 +48,11 @@ func initElasticHelper(addr string) (*ElasticHelper, error) {
 	return &es, nil
 }
 
-func escapeSpecialSymbols(s string) string {
-	special_symbols := []string{"\\", "+", "-", "&", "|", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "/", "~", "*", "?", ":"}
-	for _, sym := range special_symbols {
-		s = strings.Replace(s, sym, "\\"+sym, -1)
-	}
-
-	return s
-
-}
-
-func escapeWildcardSymbols(s string) string {
-	return strings.Replace(escapeSpecialSymbols(s), "*", "\\*", -1)
-}
-
 func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits []interface{}, totalPages int, err error) {
 
 	mustRequirementAnd := map[string]interface{}{
 		"simple_query_string": map[string]interface{}{
-			"query":            escapeWildcardSymbols(query.Text),
+			"query":            query.Text,
 			"default_operator": "AND",
 			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
@@ -82,7 +67,7 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 
 	mustRequirementOr := map[string]interface{}{
 		"simple_query_string": map[string]interface{}{
-			"query":            escapeWildcardSymbols(query.Text),
+			"query":            query.Text,
 			"default_operator": "OR",
 			"analyzer":         "russian_min_length_2",
 			"fields": []interface{}{
@@ -145,14 +130,15 @@ func (es *ElasticHelper) search(query *SearchQuery, ctx context.Context) (hits [
 						},
 					},
 					{
-						"query_string": map[string]interface{}{
-							"query": escapeSpecialSymbols(query.Text),
-						},
-					},
-					{
 						"bool": map[string]interface{}{
 							"must":   mustRequirementOr,
 							"filter": filterRequirements,
+						},
+					},
+					{
+						"simple_query_string": map[string]interface{}{
+							"query":  query.Text,
+							"fields": []interface{}{"name^6", "code^4", "description^2"},
 						},
 					},
 				},
