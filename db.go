@@ -157,7 +157,7 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	args := []interface{}{product_ids}
 
 	supplier_warehouses := ""
-	if userInfo.Admin {
+	if userInfo.Admin || userInfo.SupplierId != 0 {
 		if city_id > 0 {
 			args = append(args, city_id)
 			supplier_warehouses = `
@@ -176,17 +176,15 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 			INNER JOIN supplier_warehouse_delivery_cities swc ON (sw.id = swc.warehouse_id) 
 		WHERE sw.is_visible = true  
 		`
-		if userInfo.SupplierId == 0 {
-			args = append(args, userInfo.Id)
-			client_cities := `
-			SELECT DISTINCT city_id 
-			FROM core_user_contractors cuc 
-				JOIN consignee_consignee con USING(contractor_id) 
-				JOIN company_city com on com.id = con.city_id 
-			WHERE cuc.user_id=$` + strconv.Itoa(len(args))
+		args = append(args, userInfo.Id)
+		client_cities := `
+		SELECT DISTINCT city_id 
+		FROM core_user_contractors cuc 
+			JOIN consignee_consignee con USING(contractor_id) 
+			JOIN company_city com on com.id = con.city_id 
+		WHERE cuc.user_id=$` + strconv.Itoa(len(args))
 
-			supplier_warehouses += `	AND swc.city_id IN (` + client_cities + `)`
-		}
+		supplier_warehouses += `	AND swc.city_id IN (` + client_cities + `)`
 
 		if city_id > 0 {
 			args = append(args, city_id)
@@ -204,15 +202,24 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	FROM
 		product_product pp
 		JOIN product_modification pm ON ( pp.id = pm.product_id )
-		JOIN product_rest  pr ON ( pm.id = pr.modification_id )
+		`
+	if userInfo.SupplierId != 0 || userInfo.Admin {
+		product_quantity += `LEFT `
+	}
+
+	product_quantity += `JOIN product_rest  pr ON ( pm.id = pr.modification_id )
 		JOIN (SELECT * FROM unnest($1::int[]) WITH ORDINALITY) x (id, ordering) ON (pp.id = x.id)
 	WHERE
 		pp.deleted = false
 		AND pm.deleted = false
 		AND pp.is_reference = false
 		AND pp.b_placement_state = 'placed'
-		AND pp.category_id IS NOT NULL
-		AND pp.hidden = false  
+	`
+	if !userInfo.Admin && userInfo.SupplierId == 0 {
+		product_quantity += `AND pp.category_id IS NOT NULL
+		`
+	}
+	product_quantity += `AND pp.hidden = false  
 	` + supplier_warehouses + `
 	GROUP BY pp.id, ordering`
 
@@ -224,15 +231,24 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 	FROM
 		product_product pp
 		JOIN product_modification pm ON ( pp.id = pm.product_id )
-		JOIN product_rest  pr ON ( pm.id = pr.modification_id )
+		`
+	if userInfo.SupplierId != 0 || userInfo.Admin {
+		product_modifications += `LEFT `
+	}
+
+	product_modifications += `JOIN product_rest  pr ON ( pm.id = pr.modification_id )
 	WHERE
 		pp.id = ANY($1)
 		AND pp.deleted = false
 		AND pm.deleted = false
 		AND pp.is_reference = false
 		AND pp.b_placement_state = 'placed'
-		AND pp.category_id IS NOT NULL
-		AND pp.hidden = false  
+		`
+	if !userInfo.Admin && userInfo.SupplierId == 0 {
+		product_modifications += `AND pp.category_id IS NOT NULL
+		`
+	}
+	product_modifications += `AND pp.hidden = false  
 	` + supplier_warehouses + `
 	ORDER BY pp.id, pr.rest DESC`
 
@@ -254,9 +270,13 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 			) pr 
 		JOIN (` + product_modifications + `) pm USING (id)
 		JOIN product_product pp USING (id) 
-		JOIN product_category pc ON ( pp.category_id = pc.id )
-		JOIN product_suppliercategory psc ON (pp.supplier_category_id = psc.id)
-		JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
+		`
+	if userInfo.Admin || userInfo.SupplierId != 0 {
+		query += `LEFT `
+	}
+	query += `JOIN product_category pc ON ( pp.category_id = pc.id )
+		LEFT JOIN product_suppliercategory psc ON (pp.supplier_category_id = psc.id)
+		LEFT JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
 		LEFT JOIN (
 			SELECT DISTINCT ON (pm.product_id) pi.image, pm.product_id
 			FROM product_image pi
@@ -265,13 +285,16 @@ func (db *DBHelper) getProductEntries(ctx context.Context, product_ids []int, pr
 				ORDER BY pm.product_id, pi.is_base DESC, pi.position ASC, pi.id ASC
 		) pi ON pi.product_id = pp.id
 	WHERE 
-		pc.hidden = false
-		AND (NOT pr.rest = 0.0`
+		(pc.hidden = false OR pc.hidden IS NULL)
+		`
+	if !userInfo.Admin && userInfo.SupplierId == 0 || inStockOnly {
+		query += `AND (NOT pr.rest = 0.0`
 
-	if !inStockOnly {
-		query += " OR pp.enable_preorder = true"
+		if !inStockOnly {
+			query += " OR pp.enable_preorder = true"
+		}
+		query += ")"
 	}
-	query += ")"
 
 	if userInfo.SupplierId != 0 {
 		args = append(args, userInfo.SupplierId)

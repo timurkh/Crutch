@@ -90,14 +90,26 @@
 					<tr class="d-flex text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
 
 						<td v-if="devMode" class="col-1 "> {{product.score}}</td>
-						<td v-if="devMode" class="col-1 "> {{product.category}}</td>
-						<td v-else class="col-2 "> {{product.category}}</td>
+						<td v-if="devMode" class="col-1 "> 
+							<span v-if="product.category.length==0" style="color:orange"><b>Не задана</b></span>
+							<span v-else>{{product.category}}</span> 
+						</td>
+						<td v-else class="col-2 "> 
+							<span v-if="product.category.length==0" style="color:orange">Не задана</span>
+							<span v-else>{{product.category}}</span> 
+						</td>
 						<td class="col-2 "> {{product.code}} </td>
 						<td class="col-2 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
 						<td class="col-2 " data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
-						<td class="col-1 "> {{product.rest}} </td>
+						<td class="col-1 "> 
+							<span v-if="product.rest==0 && product.warehouse_id==0"> <i class="fas fa-exclamation-circle" style="color:orange" title="Наличие не задано"></i></span>
+							<span v-else>{{product.rest}}</span> 
+						</td>
 						<td class="col-1 "> {{product.price}} </td>
-						<td class="col-2 "> {{product.supplier}} </td>
+						<td class="col-2 ">
+							<span v-if="product.supplier.length==0" style="color:orange"><b>Сирота</b></span>
+							<span v-else>{{product.supplier}}</span> 
+						</td>
 
 					</tr>
 				</div>
@@ -105,7 +117,10 @@
 					<tr class="text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
 
 						<td class="col-5 "> <a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a> </td>
-						<td class="col-2 "> {{product.rest}} </td>
+						<td class="col-2 "> 
+							<span v-if="product.rest==0 && product.warehouse_id==0"> <i class="fas fa-exclamation-circle" style="color:orange"></i></span>
+							<span v-else>{{product.rest}}</span> 
+						</td>
 						<td class="col-2 "> {{product.price}} </td>
 						<td class="col-3 "> {{product.supplier}} </td>
 

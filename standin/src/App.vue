@@ -389,7 +389,10 @@
 							<tr class="d-flex text-wrap text-break" v-for="(product, index) in searchResults" :key="index">
 
 								<td v-if="devMode" class="col-1 col-code"> {{product.score}}</td>
-								<td class="col-1 col-category"> {{product.category}}</td>
+								<td class="col-1 col-category"> 
+									<span v-if="product.category.length==0" style="color:orange"><b>Не задана</b></span>
+									<span v-else>{{product.category}}</span> 
+								</td>
 								<td class="col-1 col-code"> {{product.code}} </td>
 								<td class="col-1"> 
 										<a  target="_blank" :href="'/catalog/product/'+product.id" >{{product.name}}</a>
@@ -398,7 +401,10 @@
 										<img v-if="product.image.length>0" :src="'/media/' + product.image" class="img-responsive">
 								</td>
 								<td class="col-1 hidden-xxs" data-toggle="tooltip" :title="product.description">  {{ truncate(stripHTML(product.description), 100, true)}} </td>
-								<td class="col-1 col-rest"> {{product.rest}} </td>
+								<td class="col-1 col-rest"> 
+									<span v-if="product.rest==0 && product.warehouse_id==0"> <i class="fas fa-exclamation-circle" style="color:orange" title="Наличие не задано"></i></span>
+									<span v-else>{{product.rest}}</span> 
+								</td>
 								<td class="col-1"> {{product.price}} </td>
 								<td class="col-1">  
 									<button v-if="product.id in cartContent.cartItems" class="btn btn-primary" disabled="true">
