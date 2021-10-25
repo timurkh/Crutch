@@ -472,19 +472,6 @@ export default {
 				})
 			}
 		},
-		getInDevMode : function(value) {
-			if(process.env.NODE_ENV === 'development') {
-				return value;
-			}
-		},
-    getAxiosErrorMessage : function(error) {
-      if (error.response != null && error.response.data != null && error.response.data != "") {
-        return error.response.data
-
-      } else {
-        return error
-      }
-    },
 		truncate : function( str, n, useWordBoundary ){
 			if (str.length <= n) { return str; }
 				const subString = str.substr(0, n-1); 

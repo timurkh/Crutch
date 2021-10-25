@@ -27,7 +27,6 @@ type UserInfo struct {
 	SupplierName   string `json:"supplier"`
 	SupplierId     int    `json:"supplier_id"`
 	CompareList    string `json:"compare_list"`
-	CompanySlug    string `json:"company_slug"`
 }
 
 type City struct {

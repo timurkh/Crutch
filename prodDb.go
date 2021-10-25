@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"math"
 	"strconv"
 	"time"
 
@@ -377,14 +377,22 @@ func toInt(v interface{}) int {
 	return int(v.(int32))
 }
 
-func toDate(v interface{}) string {
+func toDateString(v interface{}) string {
 	if v != nil {
 		return v.(time.Time).Format("2006-01-02")
 	}
 	return ""
 }
 
-func toTime(v interface{}) string {
+func toTime(v interface{}) *time.Time {
+	if v != nil {
+		t := v.(time.Time)
+		return &t
+	}
+	return nil
+}
+
+func toTimeString(v interface{}) string {
 	if v != nil {
 		return v.(time.Time).Format("15:04:05")
 	}
@@ -571,20 +579,27 @@ func (db *ProdDBHelper) ordersAccessRightsFilter(userInfo UserInfo) (string, []i
 	args := make([]interface{}, 0)
 	if !userInfo.Admin && !(userInfo.Staff && userInfo.CanReadOrders) {
 
-		args = append(args, userInfo.Id)
-		if userInfo.CompanyAdmin {
+		if userInfo.SupplierId > 0 && userInfo.CompanyAdmin {
+			args = append(args, userInfo.SupplierId)
+			filterUsers = ` AND oo.supplier_id = $`
+			filterUsers += strconv.Itoa(len(args))
+		} else if userInfo.CompanyAdmin {
+
+			args = append(args, userInfo.Id)
 			filterUsers = ` AND oo.contractor_id in (
 				SELECT contractor_id FROM core_user_contractors 
 				WHERE user_id=$`
+			filterUsers += strconv.Itoa(len(args)) + ")"
 		} else {
 
+			args = append(args, userInfo.Id)
 			filterUsers = ` AND oo.user_id in (
 				SELECT ou.id 
 				FROM core_user ou 
 					JOIN core_user cu ON (ou.lft <= cu.rght  AND ou.lft >= cu.lft  AND ou.tree_id = cu.tree_id) 
 				WHERE cu.id=$`
+			filterUsers += strconv.Itoa(len(args)) + ")"
 		}
-		filterUsers += strconv.Itoa(len(args)) + ")"
 	} else {
 		args = append(args, true)
 		filterUsers = " AND $1"
@@ -682,7 +697,35 @@ func (db *ProdDBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ord
 	return count, sum, err
 }
 
-func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []map[string]interface{}, err error) {
+type OrderDetails struct {
+	Id                 int        `json:"id"`
+	ContractorNumber   string     `json:"contractor_number"`
+	Sum                float64    `json:"sum"`
+	Status             string     `json:"status"`
+	OrderedDate        *time.Time `json:"ordered_date"`
+	ClosedDate         *time.Time `json:"closed_date"`
+	ShippingDateEst    *time.Time `json:"shipping_date_est"`
+	SellerId           int        `json:"seller_id"`
+	SellerName         string     `json:"seller_name"`
+	SellerInn          string     `json:"seller_inn"`
+	SellerKpp          string     `json:"seller_kpp"`
+	SellerAddress      string     `json:"seller_address"`
+	BuyerId            int        `json:"buyer_id"`
+	Buyer              string     `json:"buyer"`
+	CustomerId         int        `json:"customer_id"`
+	CustomerName       string     `json:"customer_name"`
+	CustomerInn        string     `json:"customer_inn"`
+	CustomerKpp        string     `json:"customer_kpp"`
+	CustomerAddress    string     `json:"customer_address"`
+	ConsigneeName      string     `json:"consignee_name"`
+	OnOrderCoupon      float64    `json:"on_order_coupon"`
+	OnOrderCouponFixed float64    `json:"on_order_coupon_fixed"`
+	ShippedDate        *time.Time `json:"shipped_date"`
+	DeliveredDate      *time.Time `json:"delivered_date"`
+	AcceptedDate       *time.Time `json:"accepted_date"`
+}
+
+func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []OrderDetails, err error) {
 
 	queryOrders := `
 		SELECT oo.id, 
@@ -759,7 +802,7 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 
 	rows, _ := db.pool.Query(ctx, queryOrders, args...)
 
-	orders = make([]map[string]interface{}, 0)
+	orders = make([]OrderDetails, 0)
 	for rows.Next() {
 
 		values, err := rows.Values()
@@ -807,32 +850,32 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			contractor_number = s[len(s)-11:]
 		}
 
-		entry := map[string]interface{}{
-			"id":                    id,
-			"contractor_number":     contractor_number,
-			"sum":                   sum,
-			"status":                status,
-			"ordered_date":          values[3],
-			"closed_date":           values[4],
-			"shipping_date_est":     values[5],
-			"seller_id":             seller_id,
-			"seller_name":           seller_name,
-			"seller_inn":            seller_inn,
-			"seller_kpp":            seller_kpp,
-			"seller_address":        seller_address,
-			"buyer_id":              buyer_id,
-			"buyer":                 buyer,
-			"customer_id":           customer_id,
-			"customer_name":         customer_name,
-			"customer_inn":          customer_inn,
-			"customer_kpp":          customer_kpp,
-			"customer_address":      customer_address,
-			"consignee_name":        consignee_name,
-			"on_order_coupon":       on_order_coupon,
-			"on_order_coupon_fixed": on_order_coupon_fixed,
-			"shipped_date":          values[22],
-			"delivered_date":        values[23],
-			"accepted_date":         values[24],
+		entry := OrderDetails{
+			id,
+			contractor_number,
+			sum,
+			status,
+			toTime(values[3]),
+			toTime(values[4]),
+			toTime(values[5]),
+			seller_id,
+			seller_name,
+			seller_inn,
+			seller_kpp,
+			seller_address,
+			buyer_id,
+			buyer,
+			customer_id,
+			customer_name,
+			customer_inn,
+			customer_kpp,
+			customer_address,
+			consignee_name,
+			on_order_coupon,
+			on_order_coupon_fixed,
+			toTime(values[22]),
+			toTime(values[23]),
+			toTime(values[24]),
 		}
 		orders = append(orders, entry)
 	}
@@ -840,7 +883,25 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 	return orders, rows.Err()
 }
 
-func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (orders []map[string]interface{}, err error) {
+type OrderLines []OrderLine
+
+type OrderLine struct {
+	ProductId     int     `json:"product_id"`
+	Name          string  `json:"name"`
+	Code          string  `json:"code"`
+	Warehouse     string  `json:"warehouse"`
+	Count         float64 `json:"count"`
+	Price         float64 `json:"price"`
+	Nds           float64 `json:"nds"`
+	CouponPercent float64 `json:"coupon_percent"`
+	CouponFixed   float64 `json:"coupon_fixed"`
+	CouponValue   float64 `json:"coupon_value"`
+	Comment       string  `json:"comment"`
+	Sum           float64 `json:"sum"`
+	Tax           float64 `json:"tax"`
+}
+
+func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (OrderLines, error) {
 
 	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
 
@@ -871,7 +932,7 @@ func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId
 	queryOrderDetails = queryOrderDetails + filterUsers + `	ORDER BY oi.id DESC`
 	rows, _ := db.pool.Query(ctx, queryOrderDetails, args...)
 
-	orderDetails := make([]map[string]interface{}, 0)
+	orderDetails := make([]OrderLine, 0)
 	for rows.Next() {
 
 		values, err := rows.Values()
@@ -912,155 +973,25 @@ func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId
 			s.AssignTo(&sum)
 		}
 
-		entry := map[string]interface{}{
-			"product_id":     id,
-			"name":           name,
-			"code":           code,
-			"warehouse":      warehouse,
-			"count":          count,
-			"price":          price,
-			"nds":            nds,
-			"coupon_percent": coupon_percent,
-			"coupon_fixed":   coupon_fixed,
-			"coupon_value":   coupon_value,
-			"comment":        comment,
-			"sum":            sum,
+		entry := OrderLine{
+			id,
+			name,
+			code,
+			warehouse,
+			count,
+			price,
+			nds,
+			coupon_percent,
+			coupon_fixed,
+			coupon_value,
+			comment,
+			sum,
+			math.Round(sum*nds) / 100,
 		}
 		orderDetails = append(orderDetails, entry)
 	}
 
 	return orderDetails, rows.Err()
-}
-
-func (db *ProdDBHelper) getOrdersCSV(ctx context.Context, userInfo UserInfo, file *os.File) error {
-
-	queryOrders := `
-		SELECT 
-			oo.id,
-			oo.contractor_number,
-			ov.order_sum,
-			os.status,
-			oo.date_ordered,
-			oo.date_closed,
-			oo.shipping_date,
-			seller.object_id as seller_id,
-			seller.name AS seller_name,
-			seller.inn AS seller_inn,
-			seller.kpp AS seller_kpp,
-			seller.jur_address AS seller_address,
-			cu.id AS buyer_id,
-			cu.last_name || ' ' || cu.first_name || ' ' || cu.middle_name AS buyer,
-			customer.object_id AS customer_id,
-			customer.name AS customer_name,
-			customer.inn AS customer_inn,
-			customer.kpp AS customer_kpp,
-			customer.jur_address AS customer_address,
-			cc.name as consignee_name,
-			oo.on_order_coupon,
-			oo.on_order_coupon_fixed,
-			ds.date_shipped,
-			dd.date_delivered,
-			da.date_accepted,
-			oi.id AS product_id,
-			oi.name AS product_name,
-			oi.code AS product_code,
-			oi.category,
-			oi.warehouse,
-			oi.count,
-			oi.item_price,
-			oi.rate_nds,
-			oi.coupon_percent,
-			oi.coupon_fixed,
-			oi.coupon_value,
-			oi.comment,
-			oi.sum AS product_sum
-		FROM order_order oo
-			JOIN (
-							SELECT oo.id,
-											round(((((sum((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)) * (((100)::numeric - oo.on_order_coupon))::double precision) / (100)::double precision) - (oo.on_order_coupon_fixed)::double precision))::numeric, 2) AS order_sum
-							FROM order_order oo
-											LEFT JOIN order_orderitem oi ON (oo.id = oi.order_id)
-							GROUP BY oo.id
-			) ov USING (id)
-			LEFT JOIN (
-							SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_shipped
-							FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id
-							WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '21'
-							GROUP BY object_id_int) ds ON ds.order_id = oo.id
-			LEFT JOIN (
-							SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_delivered
-							FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id
-							WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '15'
-							GROUP BY object_id_int) dd ON dd.order_id = oo.id
-			LEFT JOIN (
-							SELECT object_id_int AS order_id, MIN(rr.date_created) AS date_accepted
-							FROM reversion_version rv JOIN reversion_revision rr ON rv.revision_id = rr.id
-							WHERE content_type_id=115 and serialized_data::json->0->'fields'->>'status' = '22'
-							GROUP BY object_id_int) da ON da.order_id = oo.id
-			JOIN order_orderstatus os ON (oo.status_id = os.id)
-			JOIN company_company seller ON (seller.object_id=oo.supplier_id AND seller.content_type_id=186)
-			JOIN core_user cu ON (cu.id = oo.user_id)
-			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
-			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
-			LEFT JOIN ( 
-				SELECT
-					oi.order_id,
-					pp.id,
-					pp.name,
-					pp.code,
-					pc.name as category,
-					sw.name AS warehouse,
-					oi.count,
-					oi.item_price,
-					oi.rate_nds,
-					oi.coupon_percent,
-					oi.coupon_fixed,
-					oi.coupon_value,
-					oi.comment,
-					round((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2) AS sum
-				FROM order_orderitem oi
-					JOIN order_order oo ON (oi.order_id = oo.id)
-					JOIN product_modification pm ON (oi.modification_id = pm.id)
-					JOIN product_product pp ON (pm.product_id = pp.id)
-					LEFT JOIN supplier_warehouse sw ON (sw.id = oi.warehouse_id)
-					LEFT JOIN product_category pc ON (pc.id = category_id)
-			 ) oi ON oi.order_id = oo.id
-		WHERE oo.status_id NOT IN (17, 18)`
-
-	// filter by access rights
-	filterUsers, args := db.ordersAccessRightsFilter(userInfo)
-	queryOrders += filterUsers
-	queryOrders += " ORDER BY oo.id DESC"
-	rows, _ := db.pool.Query(ctx, queryOrders, args...)
-
-	for _, field := range rows.FieldDescriptions() {
-		file.Write(field.Name)
-		file.Write([]byte("|"))
-	}
-	file.Write([]byte("\n"))
-
-	for rows.Next() {
-		values, err := rows.Values()
-		if err != nil {
-			return err
-		}
-		for _, value := range values {
-			switch value.(type) {
-			case pgtype.Numeric:
-				var f float64
-				v := value.(pgtype.Numeric)
-				v.AssignTo(&f)
-				file.WriteString(fmt.Sprintf("%v", f))
-			default:
-				file.WriteString(fmt.Sprintf("%v", value))
-			}
-			file.Write([]byte("|"))
-		}
-
-		file.Write([]byte("\n"))
-	}
-
-	return nil
 }
 
 type CartNumbers struct {

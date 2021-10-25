@@ -12,7 +12,18 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	"industrial.market/crutch/docs"
+	_ "industrial.market/crutch/docs"
 )
+
+// @title Industrial.Market API
+// @version 1.0
+
+// @host industrial.market
+// @BasePath /crutch/methods
+// @securityDefinitions.basic BasicAuth
 
 var log *logrus.Logger
 
@@ -46,6 +57,7 @@ func main() {
 
 	port := getEnv("PORT", "3001")
 	baseUrl := getEnv("BASEURL", "crutchdev")
+	docs.SwaggerInfo.BasePath = "/" + baseUrl + "/methods"
 	standinUrl := getEnv("STANDINURL", "standindev")
 
 	elastic := getEnv("ELASTIC", "http://10.130.0.21:9400")
@@ -55,10 +67,10 @@ func main() {
 	prodDBPswd := getEnv("PROD_DB_PASSWORD", "pgpassword")
 	prodDBDtbs := getEnv("PROD_DB_DATABASE", "optima3_severstal")
 
-	//	crutchDBHost := getEnv("CRUTCH_DB_HOST", "127.0.0.1:5432")
-	//	crutchDBUser := getEnv("CRUTCH_DB_USER", "pguser")
-	//	crutchDBPswd := getEnv("CRUTCH_DB_PASSWORD", "pgpassword")
-	//	crutchDBDtbs := getEnv("CRUTCH_DB_DATABASE", "crutch")
+	crutchDBHost := getEnv("CRUTCH_DB_HOST", "127.0.0.1:5432")
+	crutchDBUser := getEnv("CRUTCH_DB_USER", "pguser")
+	crutchDBPswd := getEnv("CRUTCH_DB_PASSWORD", "pgpassword")
+	crutchDBDtbs := getEnv("CRUTCH_DB_DATABASE", "crutch")
 
 	es, err := initElasticHelper(elastic)
 	if err != nil {
@@ -70,13 +82,15 @@ func main() {
 		log.Fatalf("Failed to init DB connection: %v\n", err)
 	}
 
-	//	crutchDB, err := initCrutchDBHelper(crutchDBHost, crutchDBUser, crutchDBPswd, crutchDBDtbs)
-	//	if err != nil {
-	//		log.Fatalf("Failed to init DB connection: %v\n", err)
-	//	}
+	crutchDB, err := initCrutchDBHelper(crutchDBHost, crutchDBUser, crutchDBPswd, crutchDBDtbs)
+	if err != nil {
+		log.Fatalf("Failed to init DB connection: %v\n", err)
+	}
+
+	_ = crutchDB
 
 	auth := initAuthMiddleware(es, prodDB)
-	methods := initMethodHandlers(auth, es, prodDB)
+	methods := initMethodHandlers(auth, es, prodDB, crutchDB)
 
 	router := mux.NewRouter().StrictSlash(true)
 
@@ -87,11 +101,48 @@ func main() {
 	crutchMethods.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 	crutchMethods.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
 	crutchMethods.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
-	crutchMethods.Methods("GET").Path("/orders/csv").Handler(appHandler(methods.getOrdersCSVHandler))
 	crutchMethods.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
 	crutchMethods.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
+	crutchMethods.Methods("GET").Path("/apiCredentials").Handler(appHandler(methods.getApiCredentials))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
+
+	crutch.Methods("GET").PathPrefix("/swagger/").Handler(httpSwagger.Handler(
+		httpSwagger.URL("https://industrial.market/"+baseUrl+"/swagger/doc.json"),
+		httpSwagger.DeepLinking(true),
+		httpSwagger.DocExpansion("list"),
+		httpSwagger.DomID("#swagger-ui"),
+		httpSwagger.UIConfig(map[string]string{"onComplete": `() => {
+					var script = document.createElement('script');
+					script.src = 'https://cdn.jsdelivr.net/npm/iframe-resizer@4.3.2/js/iframeResizer.contentWindow.min.js';
+					document.head.appendChild(script);
+				}`,
+		}),
+		// hack to change layout:
+		httpSwagger.BeforeScript(`
+				var script = document.createElement('script');
+				script.src = 'https://cdn.jsdelivr.net/npm/iframe-resizer@4.3.2/js/iframeResizer.contentWindow.min.js';
+				document.head.appendChild(script);
+
+				const ui_ = SwaggerUIBundle({
+					url: "\/`+baseUrl+`\/swagger\/doc.json",
+					deepLinking: true,
+					docExpansion: "full",
+					dom_id: "#swagger-ui",
+					validatorUrl: null,
+					presets: [
+						SwaggerUIBundle.presets.apis,
+					],
+					plugins: [
+						SwaggerUIBundle.plugins.DownloadUrl
+					],
+					layout: "BaseLayout"
+				})
+				window.ui = ui_
+				return
+			`),
+	))
+
 	fsCrutch := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //wrapHandler is used to handle history mode URLs
 	crutch.PathPrefix("/").Handler(http.StripPrefix("/"+baseUrl, fsCrutch))
 

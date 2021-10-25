@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"unicode/utf8"
@@ -20,14 +19,15 @@ import (
 const itemsPerPage = 200
 
 type MethodHandlers struct {
-	auth   *AuthMiddleware
-	es     *ElasticHelper
-	prodDB *ProdDBHelper
+	auth     *AuthMiddleware
+	es       *ElasticHelper
+	prodDB   *ProdDBHelper
+	crutchDB *CrutchDBHelper
 }
 
-func initMethodHandlers(auth *AuthMiddleware, es *ElasticHelper, db *ProdDBHelper) *MethodHandlers {
+func initMethodHandlers(auth *AuthMiddleware, es *ElasticHelper, db *ProdDBHelper, crutchDb *CrutchDBHelper) *MethodHandlers {
 
-	mh := MethodHandlers{auth, es, db}
+	mh := MethodHandlers{auth, es, db, crutchDb}
 
 	return &mh
 }
@@ -436,6 +436,25 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 
 	return nil
 }
+
+type Orders struct {
+	Orders []OrderDetails `json:"orders"`
+	Count  int            `json:"count"`
+	Sum    float64        `json:"sum"`
+}
+
+// @Summary List orders
+// @Description Get orders list
+// @Tags orders
+// @Produce  json
+// @Param start query string false "Start of the period used to filter orders, in datetime format (e.g. 2021-10-23T21:00:00.000Z)"
+// @Param end query string false "End of the period used to filter orders, in datetime format (e.g. 2021-10-24T20:59:59.999Z)"
+// @Param dateColumn query string false "Date used to filter orders" Enums(date_ordered, date_closed)
+// @Param text query string false "Query used to filter orders, might be customer name, order number or buyer name"
+// @Param itemsPerPage query int false "Page size" default(10) minimum(1) maximum(10)
+// @Param page query int false "Page number" default(0)
+// @Success 200 {object} Orders
+// @Router /orders/ [get]
 func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
 
 	var ordersFilter OrdersFilter
@@ -446,6 +465,13 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 		err = fmt.Errorf("Failed to decode filter: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return err
+	}
+
+	if ordersFilter.ItemsPerPage <= 0 {
+		ordersFilter.ItemsPerPage = 10
+	}
+	if ordersFilter.ItemsPerPage > 1000 {
+		ordersFilter.ItemsPerPage = 1000
 	}
 
 	userInfo := mh.auth.getUserInfo(r)
@@ -467,11 +493,7 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return e
 		}
-		err = json.NewEncoder(w).Encode(struct {
-			Orders interface{} `json:"orders"`
-			Count  interface{} `json:"count"`
-			Sum    interface{} `json:"sum"`
-		}{orders, count, sum})
+		err = json.NewEncoder(w).Encode(Orders{orders, count, sum})
 
 	} else {
 		err = json.NewEncoder(w).Encode(struct {
@@ -488,6 +510,13 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
+// @Summary List order lines
+// @Description Get order itemslist
+// @Param orderId path int true "Order Id"
+// @Tags order
+// @Produce  json
+// @Success 200 {object} OrderLines
+// @Router /order/{orderId} [get]
 func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
@@ -519,16 +548,6 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	return nil
-}
-
-func getNums(orderDetail map[string]interface{}) (float64, float64, float64, float64, float64) {
-	count := orderDetail["count"].(float64)
-	price := orderDetail["price"].(float64)
-	sum := orderDetail["sum"].(float64)
-	nds := orderDetail["nds"].(float64)
-	tax := math.Round(sum*nds) / 100
-
-	return count, price, sum, nds, tax
 }
 
 func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.Request) error {
@@ -659,7 +678,7 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	for _, order := range orders {
 		orderStartRow := row
 
-		orderDetails, err := mh.prodDB.getOrder(r.Context(), userInfo, order["id"].(int))
+		orderDetails, err := mh.prodDB.getOrder(r.Context(), userInfo, order.Id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return err
@@ -668,46 +687,44 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		for i := 0; i < len(orderDetails); i++ {
 			orderDetail := orderDetails[i]
 
-			count, price, sum, nds, tax := getNums(orderDetail)
-
 			streamWriter.SetRow(fmt.Sprintf("A%v", row), []interface{}{
-				excelize.Cell{Value: order["id"]},
-				excelize.Cell{Value: order["contractor_number"]},
-				excelize.Cell{Value: toDate(order["ordered_date"])},
-				excelize.Cell{Value: toDate(order["closed_date"])},
+				excelize.Cell{Value: order.Id},
+				excelize.Cell{Value: order.ContractorNumber},
+				excelize.Cell{Value: toDateString(order.OrderedDate)},
+				excelize.Cell{Value: toDateString(order.ClosedDate)},
 				excelize.Cell{Value: "Общество с ограниченной ответственностью \"Центр Промышленных Закупок\""},
 				excelize.Cell{Value: "127299, г. Москва, ул. Клары Цеткин, д. 2, помещ. 138"},
 				excelize.Cell{Value: "3528136252/771301001"},
-				excelize.Cell{Value: order["seller_name"]},
-				excelize.Cell{Value: order["seller_address"]},
-				excelize.Cell{Value: order["customer_name"]},
-				excelize.Cell{Value: order["customer_address"]},
-				excelize.Cell{Value: order["customer_name"]},
-				excelize.Cell{Value: order["customer_address"]},
-				excelize.Cell{Value: order["seller_inn"]},
-				excelize.Cell{Value: order["seller_kpp"]},
-				excelize.Cell{Value: order["customer_inn"]},
-				excelize.Cell{Value: order["customer_kpp"]},
+				excelize.Cell{Value: order.SellerName},
+				excelize.Cell{Value: order.SellerAddress},
+				excelize.Cell{Value: order.CustomerName},
+				excelize.Cell{Value: order.CustomerAddress},
+				excelize.Cell{Value: order.CustomerName},
+				excelize.Cell{Value: order.CustomerAddress},
+				excelize.Cell{Value: order.SellerInn},
+				excelize.Cell{Value: order.SellerKpp},
+				excelize.Cell{Value: order.CustomerInn},
+				excelize.Cell{Value: order.CustomerKpp},
 
-				excelize.Cell{Value: orderDetail["product_id"]},
-				excelize.Cell{Value: orderDetail["code"]},
-				excelize.Cell{Value: orderDetail["name"]},
+				excelize.Cell{Value: orderDetail.ProductId},
+				excelize.Cell{Value: orderDetail.Code},
+				excelize.Cell{Value: orderDetail.Name},
 				excelize.Cell{Value: "Шт"},
-				excelize.Cell{Value: count},
-				excelize.Cell{Value: price},
-				excelize.Cell{Value: sum},
-				excelize.Cell{Value: nds},
-				excelize.Cell{Value: tax},
-				excelize.Cell{Value: tax + sum},
+				excelize.Cell{Value: orderDetail.Count},
+				excelize.Cell{Value: orderDetail.Price},
+				excelize.Cell{Value: orderDetail.Sum},
+				excelize.Cell{Value: orderDetail.Nds},
+				excelize.Cell{Value: orderDetail.Tax},
+				excelize.Cell{Value: orderDetail.Tax + orderDetail.Sum},
 
-				excelize.Cell{Value: toDate(order["shipping_date_est"])},
-				excelize.Cell{Value: toDate(order["shipped_date"])},
-				excelize.Cell{Value: toTime(order["shipped_date"])},
-				excelize.Cell{Value: toDate(order["delivered_date"])},
-				excelize.Cell{Value: toTime(order["delivered_date"])},
-				excelize.Cell{Value: toDate(order["accepted_date"])},
-				excelize.Cell{Value: toTime(order["accepted_date"])},
-				excelize.Cell{Value: order["status"]},
+				excelize.Cell{Value: toDateString(order.ShippingDateEst)},
+				excelize.Cell{Value: toDateString(order.ShippedDate)},
+				excelize.Cell{Value: toTimeString(order.ShippedDate)},
+				excelize.Cell{Value: toDateString(order.DeliveredDate)},
+				excelize.Cell{Value: toTimeString(order.DeliveredDate)},
+				excelize.Cell{Value: toDateString(order.AcceptedDate)},
+				excelize.Cell{Value: toTimeString(order.AcceptedDate)},
+				excelize.Cell{Value: order.Status},
 			})
 
 			row++
@@ -742,28 +759,6 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	xls.SaveAs(file.Name())
 
 	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFile(w, r, file.Name())
-
-	return nil
-}
-
-func (mh *MethodHandlers) getOrdersCSVHandler(w http.ResponseWriter, r *http.Request) error {
-
-	userInfo := mh.auth.getUserInfo(r)
-
-	file, err := os.CreateTemp("/tmp", "*.csv")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	defer os.Remove(file.Name())
-
-	mh.prodDB.getOrdersCSV(r.Context(), userInfo, file)
-
-	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.csv"))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, file.Name())
@@ -836,4 +831,35 @@ func (mh *MethodHandlers) getCartContent(w http.ResponseWriter, r *http.Request)
 
 	return nil
 
+}
+
+func (mh *MethodHandlers) getApiCredentials(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	if !userInfo.CompanyAdmin {
+		err := fmt.Errorf("This resource requires company admin privileges")
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return err
+	}
+
+	apiCreds, err := mh.crutchDB.getApiCredentials(userInfo)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(apiCreds)
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
 }
