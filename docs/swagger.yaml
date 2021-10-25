@@ -1,0 +1,174 @@
+basePath: /crutch/methods
+definitions:
+  main.OrderDetails:
+    properties:
+      accepted_date:
+        type: string
+      buyer:
+        type: string
+      buyer_id:
+        type: integer
+      closed_date:
+        type: string
+      consignee_name:
+        type: string
+      contractor_number:
+        type: string
+      customer_address:
+        type: string
+      customer_id:
+        type: integer
+      customer_inn:
+        type: string
+      customer_kpp:
+        type: string
+      customer_name:
+        type: string
+      delivered_date:
+        type: string
+      id:
+        type: integer
+      on_order_coupon:
+        type: number
+      on_order_coupon_fixed:
+        type: number
+      ordered_date:
+        type: string
+      seller_address:
+        type: string
+      seller_id:
+        type: integer
+      seller_inn:
+        type: string
+      seller_kpp:
+        type: string
+      seller_name:
+        type: string
+      shipped_date:
+        type: string
+      shipping_date_est:
+        type: string
+      status:
+        type: string
+      sum:
+        type: number
+    type: object
+  main.OrderLine:
+    properties:
+      code:
+        type: string
+      comment:
+        type: string
+      count:
+        type: number
+      coupon_fixed:
+        type: number
+      coupon_percent:
+        type: number
+      coupon_value:
+        type: number
+      name:
+        type: string
+      nds:
+        type: number
+      price:
+        type: number
+      product_id:
+        type: integer
+      sum:
+        type: number
+      tax:
+        type: number
+      warehouse:
+        type: string
+    type: object
+  main.Orders:
+    properties:
+      count:
+        type: integer
+      orders:
+        items:
+          $ref: '#/definitions/main.OrderDetails'
+        type: array
+      sum:
+        type: number
+    type: object
+host: industrial.market
+info:
+  contact: {}
+  title: Industrial.Market API
+  version: "1.0"
+paths:
+  /order/{orderId}:
+    get:
+      description: Get order itemslist
+      parameters:
+      - description: Order Id
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.OrderLine'
+            type: array
+      summary: List order lines
+      tags:
+      - order
+  /orders/:
+    get:
+      description: Get orders list
+      parameters:
+      - description: Start of the period used to filter orders, in datetime format
+          (e.g. 2021-10-23T21:00:00.000Z)
+        in: query
+        name: start
+        type: string
+      - description: End of the period used to filter orders, in datetime format (e.g.
+          2021-10-24T20:59:59.999Z)
+        in: query
+        name: end
+        type: string
+      - description: Date used to filter orders
+        enum:
+        - date_ordered
+        - date_closed
+        in: query
+        name: dateColumn
+        type: string
+      - description: Query used to filter orders, might be customer name, order number
+          or buyer name
+        in: query
+        name: text
+        type: string
+      - default: 10
+        description: Page size
+        in: query
+        maximum: 10
+        minimum: 1
+        name: itemsPerPage
+        type: integer
+      - default: 0
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Orders'
+      summary: List orders
+      tags:
+      - orders
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

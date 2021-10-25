@@ -167,6 +167,7 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 				INNER JOIN supplier_warehouse_delivery_cities swc ON (sw.id = swc.warehouse_id) 
 			WHERE sw.is_visible = true  
 				AND swc.city_id = $` + strconv.Itoa(len(args))
+			supplier_warehouses += `)`
 		}
 	} else {
 		supplier_warehouses = `

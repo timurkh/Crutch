@@ -13,6 +13,7 @@ require github.com/jackc/pgx/v4 v4.13.1-0.20210809134107-23b4656fc573
 require (
 	github.com/go-openapi/spec v0.20.4 // indirect
 	github.com/gorilla/context v1.1.1 // indirect
+	github.com/gorilla/csrf v1.7.1 // indirect
 	github.com/gorilla/schema v1.2.0 // indirect
 	github.com/gosimple/slug v1.11.0 // indirect
 	github.com/jackc/pgconn v1.10.0

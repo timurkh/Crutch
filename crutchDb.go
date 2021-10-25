@@ -127,3 +127,27 @@ func (db *CrutchDBHelper) getApiCredentials(userInfo UserInfo) (*ApiCredentials,
 	return &api, nil
 
 }
+
+func (db *CrutchDBHelper) setApiCredentialsEnabled(userInfo UserInfo, enabled bool) (*ApiCredentials, error) {
+
+	api := ApiCredentials{AuthType: "Basic"}
+	err := db.pool.QueryRow(context.Background(), "UPDATE api_credentials SET enabled=$1, date_updated=NOW() WHERE user_id=$2 RETURNING login, enabled, password", enabled, userInfo.Id).Scan(&api.Login, &api.Enabled, &api.Password)
+
+	return &api, err
+}
+
+func (db *CrutchDBHelper) updateApiCredentialsPassword(userInfo UserInfo) (*ApiCredentials, error) {
+
+	api := ApiCredentials{AuthType: "Basic"}
+	err := db.pool.QueryRow(context.Background(), "UPDATE api_credentials SET password=$1, date_updated=NOW() WHERE user_id=$2 RETURNING login, enabled, password", generatePassword(16, 2, 2, 2), userInfo.Id).Scan(&api.Login, &api.Enabled, &api.Password)
+
+	return &api, err
+}
+
+func (db *CrutchDBHelper) getUserCredsFromApiLogin(login string) (int, string, error) {
+	var password string
+	var user_id int
+	err := db.pool.QueryRow(context.Background(), "SELECT user_id, password FROM api_credentials WHERE login=$1", login).Scan(&user_id, &password)
+
+	return user_id, password, err
+}

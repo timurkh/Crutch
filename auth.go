@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -35,13 +37,14 @@ type City struct {
 }
 
 type AuthMiddleware struct {
-	es *ElasticHelper
-	db *ProdDBHelper
+	es       *ElasticHelper
+	prodDB   *ProdDBHelper
+	crutchDB *CrutchDBHelper
 }
 
-func initAuthMiddleware(es *ElasticHelper, db *ProdDBHelper) *AuthMiddleware {
+func initAuthMiddleware(es *ElasticHelper, db *ProdDBHelper, crutchDB *CrutchDBHelper) *AuthMiddleware {
 
-	au := AuthMiddleware{es, db}
+	au := AuthMiddleware{es, db, crutchDB}
 
 	return &au
 }
@@ -56,21 +59,56 @@ func (auth *AuthMiddleware) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer TimeTrack("Processing "+r.URL.Path, time.Now())
 
-		err := auth.validateSession(w, r)
-		if err == nil {
-			next.ServeHTTP(w, r)
+		ui, err := auth.checkBasicAuth(w, r)
+		if err != nil || ui == nil {
+			ui, err = auth.validateSession(w, r)
+		}
+
+		if err == nil && ui != nil {
+
+			err = auth.loadUserInfo(w, r, ui)
+
+			if err == nil {
+				next.ServeHTTP(w, r)
+			}
 		}
 	})
 }
 
-func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Request) error {
+func (auth *AuthMiddleware) checkBasicAuth(w http.ResponseWriter, r *http.Request) (*UserInfo, error) {
+	username, password, ok := r.BasicAuth()
+	if ok {
+
+		userId, expectedPassword, err := auth.crutchDB.getUserCredsFromApiLogin(username)
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to find username %s", username)
+		}
+
+		passwordHash := sha256.Sum256([]byte(password))
+
+		expectedPasswordHash := sha256.Sum256([]byte(expectedPassword))
+
+		passwordMatch := (subtle.ConstantTimeCompare(passwordHash[:], expectedPasswordHash[:]) == 1)
+
+		if !passwordMatch {
+			return nil, fmt.Errorf("Password is wrong")
+		}
+
+		log.Info("BasicAuth: userId ", userId)
+		return &UserInfo{Id: userId}, nil
+	}
+	return nil, fmt.Errorf("No auth headers")
+}
+
+func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Request) (*UserInfo, error) {
 
 	sessionCookie, err := r.Cookie("sessionid")
 	if err != nil {
 		err = fmt.Errorf("Failed to retrieve sessionid cookie: %v", err)
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return err
+		return nil, err
 	}
 
 	sessionKey := sessionCookie.Value
@@ -78,12 +116,12 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	log.Trace("Getting user info for sessionid ", sessionKey)
 
 	var encodedSessionData string
-	err = auth.db.pool.QueryRow(context.Background(), "select session_data from django_session where session_key=$1", sessionKey).Scan(&encodedSessionData)
+	err = auth.prodDB.pool.QueryRow(context.Background(), "select session_data from django_session where session_key=$1", sessionKey).Scan(&encodedSessionData)
 	if err != nil {
 		err = fmt.Errorf("Session does not exist: %v", err)
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return err
+		return nil, err
 	}
 
 	decodedSessionData, err := base64.StdEncoding.DecodeString(encodedSessionData)
@@ -91,7 +129,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 		err = fmt.Errorf("Failed to decode session data: %v", err)
 		log.Error(err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return err
+		return nil, err
 	}
 
 	re := regexp.MustCompile(`[^{]*({.*})$`)
@@ -104,11 +142,14 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	}
 	json.Unmarshal([]byte(jsonSessionData), &sessionData)
 
-	log.Info("UserID: ", sessionData.UserID)
+	log.Info("Session: userId ", sessionData.UserID)
 
-	ui := UserInfo{Id: sessionData.UserID}
-	udi, err := auth.db.getUserInfo(ui.Id)
-	log.Info(fmt.Sprintf("UserInfo: %+v", udi))
+	return &UserInfo{Id: sessionData.UserID, CompareList: sessionData.CompareList}, nil
+}
+
+func (auth *AuthMiddleware) loadUserInfo(w http.ResponseWriter, r *http.Request, ui *UserInfo) error {
+
+	udi, err := auth.prodDB.getUserInfo(ui.Id)
 
 	if err != nil {
 		log.Error(err)
@@ -150,7 +191,6 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 	ui.ContractorId = udi.contractor_id
 	ui.SupplierName = udi.supplier_name
 	ui.SupplierId = udi.supplier_id
-	ui.CompareList = sessionData.CompareList
 
 	if !udi.is_superuser && !udi.verified {
 		err = fmt.Errorf("User %s (%s) is not verified yet", ui.Name, ui.Email)
@@ -166,7 +206,7 @@ func (auth *AuthMiddleware) validateSession(w http.ResponseWriter, r *http.Reque
 
 	log.Info("User ", fmt.Sprintf("%+v", ui))
 
-	gorilla_context.Set(r, "UserInfo", ui)
+	gorilla_context.Set(r, "UserInfo", *ui)
 
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -89,10 +90,18 @@ func main() {
 
 	_ = crutchDB
 
-	auth := initAuthMiddleware(es, prodDB)
+	auth := initAuthMiddleware(es, prodDB, crutchDB)
 	methods := initMethodHandlers(auth, es, prodDB, crutchDB)
 
 	router := mux.NewRouter().StrictSlash(true)
+	CSRF := csrf.Protect(
+		[]byte("dG3d563vyukewv%Yetrsbvsfd%WYfvs!"),
+		csrf.SameSite(csrf.SameSiteStrictMode),
+		csrf.Secure(true),
+		csrf.HttpOnly(true),
+	)
+
+	router.Use(CSRF)
 
 	crutchMethods := router.PathPrefix("/" + baseUrl + "/methods").Subrouter()
 	crutchMethods.Use(auth.authMiddleware)
@@ -104,6 +113,7 @@ func main() {
 	crutchMethods.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
 	crutchMethods.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 	crutchMethods.Methods("GET").Path("/apiCredentials").Handler(appHandler(methods.getApiCredentials))
+	crutchMethods.Methods("PUT").Path("/apiCredentials").Handler(appHandler(methods.putApiCredentials))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
 
@@ -139,11 +149,12 @@ func main() {
 					layout: "BaseLayout"
 				})
 				window.ui = ui_
-				return
+				if (window.ui != null)
+					return
 			`),
 	))
 
-	fsCrutch := wrapHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //wrapHandler is used to handle history mode URLs
+	fsCrutch := singlePageAppHandler(http.FileServer(http.Dir("./frontend/dist")), "/"+baseUrl) //wrapHandler is used to handle history mode URLs
 	crutch.PathPrefix("/").Handler(http.StripPrefix("/"+baseUrl, fsCrutch))
 
 	standinAPI := router.PathPrefix("/" + standinUrl + "/methods").Subrouter()
@@ -153,14 +164,14 @@ func main() {
 	standinAPI.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 
 	standin := router.PathPrefix("/" + standinUrl).Subrouter()
-	fsStandin := wrapHandler(http.FileServer(http.Dir("./standin/dist")), "/"+standinUrl)
+	fsStandin := singlePageAppHandler(http.FileServer(http.Dir("./standin/dist")), "/"+standinUrl)
 	standin.PathPrefix("/").Handler(http.StripPrefix("/"+standinUrl, fsStandin))
 
 	http.Handle("/", WithLogging(router))
 
 	log.Printf("Server listening on port %s, base url %s\n", port, baseUrl)
 	log.Panic(
-		http.ListenAndServe(":"+port, nil),
+		http.ListenAndServe(":"+port, router),
 	)
 }
 
@@ -183,9 +194,10 @@ func (w *NotFoundRedirectRespWr) Write(p []byte) (int, error) {
 	return len(p), nil // Lie that we successfully written it
 }
 
-func wrapHandler(h http.Handler, baseUrl string) http.HandlerFunc {
+func singlePageAppHandler(h http.Handler, baseUrl string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.RequestURI, baseUrl+"/methods/") {
+
 			nfrw := &NotFoundRedirectRespWr{ResponseWriter: w}
 			h.ServeHTTP(nfrw, r)
 

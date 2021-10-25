@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/xuri/excelize/v2"
@@ -203,8 +204,12 @@ func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request)
 
 	userInfo := mh.auth.getUserInfo(r)
 	cities, err := mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
+	if len(cities) == 0 && userInfo.SupplierId != 0 {
+		cities, err = mh.prodDB.getSupplierCities(r.Context(), userInfo.SupplierId)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-CSRF-Token", csrf.Token(r))
 	w.WriteHeader(http.StatusOK)
 
 	err = json.NewEncoder(w).Encode(struct {
@@ -844,6 +849,55 @@ func (mh *MethodHandlers) getApiCredentials(w http.ResponseWriter, r *http.Reque
 	}
 
 	apiCreds, err := mh.crutchDB.getApiCredentials(userInfo)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	err = json.NewEncoder(w).Encode(apiCreds)
+
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+}
+
+func (mh *MethodHandlers) putApiCredentials(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.auth.getUserInfo(r)
+
+	if !userInfo.CompanyAdmin {
+		err := fmt.Errorf("This resource requires company admin privileges")
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return err
+	}
+
+	params := struct {
+		Enabled  *bool `json:"enabled"`
+		Password *bool `json:"password"`
+	}{}
+
+	err := json.NewDecoder(r.Body).Decode(&params)
+	if err != nil {
+		err = fmt.Errorf("Failed to decode request body - %s", err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+
+	var apiCreds *ApiCredentials
+
+	if params.Enabled != nil {
+		apiCreds, err = mh.crutchDB.setApiCredentialsEnabled(userInfo, *params.Enabled)
+	} else if params.Password != nil {
+		apiCreds, err = mh.crutchDB.updateApiCredentialsPassword(userInfo)
+	}
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

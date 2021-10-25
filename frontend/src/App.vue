@@ -116,6 +116,7 @@ export default {
 			})      
       .then(res => {
         user.value = res.data
+				user.value.csrf = res.headers['x-csrf-token']
       })
       .catch(error => {
 				console.log(error.response);
