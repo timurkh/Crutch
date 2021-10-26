@@ -153,17 +153,8 @@ var doc = `{
                 "contractor_number": {
                     "type": "string"
                 },
-                "customer_address": {
-                    "type": "string"
-                },
                 "customer_id": {
                     "type": "integer"
-                },
-                "customer_inn": {
-                    "type": "string"
-                },
-                "customer_kpp": {
-                    "type": "string"
                 },
                 "customer_name": {
                     "type": "string"
@@ -183,17 +174,8 @@ var doc = `{
                 "ordered_date": {
                     "type": "string"
                 },
-                "seller_address": {
-                    "type": "string"
-                },
                 "seller_id": {
                     "type": "integer"
-                },
-                "seller_inn": {
-                    "type": "string"
-                },
-                "seller_kpp": {
-                    "type": "string"
                 },
                 "seller_name": {
                     "type": "string"

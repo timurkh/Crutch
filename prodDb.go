@@ -715,16 +715,16 @@ type OrderDetails struct {
 	ShippingDateEst    *time.Time `json:"shipping_date_est"`
 	SellerId           int        `json:"seller_id"`
 	SellerName         string     `json:"seller_name"`
-	SellerInn          string     `json:"seller_inn"`
-	SellerKpp          string     `json:"seller_kpp"`
-	SellerAddress      string     `json:"seller_address"`
-	BuyerId            int        `json:"buyer_id"`
-	Buyer              string     `json:"buyer"`
-	CustomerId         int        `json:"customer_id"`
-	CustomerName       string     `json:"customer_name"`
-	CustomerInn        string     `json:"customer_inn"`
-	CustomerKpp        string     `json:"customer_kpp"`
-	CustomerAddress    string     `json:"customer_address"`
+	sellerInn          string
+	sellerKpp          string
+	sellerAddress      string
+	BuyerId            int    `json:"buyer_id"`
+	Buyer              string `json:"buyer"`
+	CustomerId         int    `json:"customer_id"`
+	CustomerName       string `json:"customer_name"`
+	customerInn        string
+	customerKpp        string
+	customerAddress    string
 	ConsigneeName      string     `json:"consignee_name"`
 	OnOrderCoupon      float64    `json:"on_order_coupon"`
 	OnOrderCouponFixed float64    `json:"on_order_coupon_fixed"`

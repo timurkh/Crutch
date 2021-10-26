@@ -559,6 +559,13 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 
 func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.Request) error {
 
+	userInfo := mh.auth.getUserInfo(r)
+	if userInfo.SupplierId != 0 {
+		err := fmt.Errorf("This resource is not available for suppliers")
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return err
+	}
+
 	var ordersFilter OrdersFilter
 	err := schema.NewDecoder().Decode(&ordersFilter, r.URL.Query())
 	if err != nil {
@@ -674,7 +681,6 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 
 	streamWriter.SetRow("A2", columnNames)
 
-	userInfo := mh.auth.getUserInfo(r)
 	orders, err := mh.prodDB.getOrders(r.Context(), userInfo, ordersFilter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -703,15 +709,15 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 				excelize.Cell{Value: "127299, г. Москва, ул. Клары Цеткин, д. 2, помещ. 138"},
 				excelize.Cell{Value: "3528136252/771301001"},
 				excelize.Cell{Value: order.SellerName},
-				excelize.Cell{Value: order.SellerAddress},
+				excelize.Cell{Value: order.sellerAddress},
 				excelize.Cell{Value: order.CustomerName},
-				excelize.Cell{Value: order.CustomerAddress},
+				excelize.Cell{Value: order.customerAddress},
 				excelize.Cell{Value: order.CustomerName},
-				excelize.Cell{Value: order.CustomerAddress},
-				excelize.Cell{Value: order.SellerInn},
-				excelize.Cell{Value: order.SellerKpp},
-				excelize.Cell{Value: order.CustomerInn},
-				excelize.Cell{Value: order.CustomerKpp},
+				excelize.Cell{Value: order.customerAddress},
+				excelize.Cell{Value: order.sellerInn},
+				excelize.Cell{Value: order.sellerKpp},
+				excelize.Cell{Value: order.customerInn},
+				excelize.Cell{Value: order.customerKpp},
 
 				excelize.Cell{Value: orderDetail.ProductId},
 				excelize.Cell{Value: orderDetail.Code},
