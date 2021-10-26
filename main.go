@@ -110,7 +110,7 @@ func main() {
 	crutchMethods.Methods("GET").Path("/products").Handler(appHandler(methods.searchProductsHandler))
 	crutchMethods.Methods("GET").Path("/orders").Handler(appHandler(methods.getOrdersHandler))
 	crutchMethods.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
-	crutchMethods.Methods("GET").Path("/order/{orderId}").Handler(appHandler(methods.getOrderHandler))
+	crutchMethods.Methods("GET").Path("/orders/{orderId}").Handler(appHandler(methods.getOrderHandler))
 	crutchMethods.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
 	crutchMethods.Methods("GET").Path("/apiCredentials").Handler(appHandler(methods.getApiCredentials))
 	crutchMethods.Methods("PUT").Path("/apiCredentials").Handler(appHandler(methods.putApiCredentials))

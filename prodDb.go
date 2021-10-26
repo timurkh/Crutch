@@ -299,10 +299,11 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 
 	if userInfo.SupplierId != 0 {
 		args = append(args, userInfo.SupplierId)
-		query += " AND supplier_id=$" + strconv.Itoa(len(args)) + ""
+		query += " AND supplier_id=$" + strconv.Itoa(len(args))
+		query += " AND status_id NOT IN (18, 26, 23, 24, 26)"
 	} else if supplier != "" {
 		args = append(args, "%"+supplier+"%")
-		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args)) + ""
+		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args))
 	}
 
 	query += " ORDER BY ordering"
@@ -378,9 +379,9 @@ func toInt(v interface{}) int {
 	return int(v.(int32))
 }
 
-func toDateString(v interface{}) string {
+func toDateString(v *time.Time) string {
 	if v != nil {
-		return v.(time.Time).Format("2006-01-02")
+		return v.Format("2006-01-02")
 	}
 	return ""
 }
@@ -393,9 +394,9 @@ func toTime(v interface{}) *time.Time {
 	return nil
 }
 
-func toTimeString(v interface{}) string {
+func toTimeString(v *time.Time) string {
 	if v != nil {
-		return v.(time.Time).Format("15:04:05")
+		return v.Format("15:04:05")
 	}
 	return ""
 }
@@ -658,18 +659,21 @@ func (db *ProdDBHelper) getOrdersFilterQuery(userInfo UserInfo, ordersFilter Ord
 	return filter, args
 }
 
-func (db *ProdDBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (count int, sum float64, err error) {
+func (db *ProdDBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (count int, sum float64, sum_with_tax float64, err error) {
 
 	queryOrders := `
 		SELECT 
 			COALESCE(COUNT(oo.id), 0),
-			COALESCE(SUM(ov.order_sum), 0)
+			COALESCE(SUM(ov.order_sum), 0),
+			COALESCE(SUM(ov.order_sum_with_tax), 0)
 		FROM order_order oo 
 			JOIN (
 				SELECT oo.id, 
-					round(((((sum((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)) * (((100)::numeric - oo.on_order_coupon))::double precision) / (100)::double precision) - (oo.on_order_coupon_fixed)::double precision))::numeric, 2) AS order_sum
-				FROM order_order oo 
-					JOIN order_orderitem oi ON (oo.id = oi.order_id)
+					ROUND((SUM(item_sum) * (100 - oo.on_order_coupon) / 100 - oo.on_order_coupon_fixed)::numeric, 2) order_sum,
+					ROUND((SUM(item_sum + ROUND((item_sum*rate_nds/100)::numeric, 2)) * (100 - oo.on_order_coupon) / 100 - oo.on_order_coupon_fixed)::numeric, 2) order_sum_with_tax
+					FROM order_order oo JOIN
+					(SELECT id, order_id, rate_nds, ROUND((oi.count * (((oi.item_price - oi.coupon_fixed) * (100 - oi.coupon_percent)) / 100))::numeric, 2) item_sum
+						FROM order_orderitem oi) oi ON oo.id = oi.order_id
 				GROUP BY oo.id
 			) ov USING (id)
 			JOIN company_company seller ON (seller.object_id=oo.supplier_id AND seller.content_type_id=186)
@@ -683,25 +687,28 @@ func (db *ProdDBHelper) getOrdersSum(ctx context.Context, userInfo UserInfo, ord
 
 	queryOrders += filter
 
-	if ordersFilter.ItemsPerPage > 0 {
-		args = append(args, ordersFilter.ItemsPerPage)
-		queryOrders = queryOrders + " LIMIT $" + strconv.Itoa(len(args))
+	/*
+		if ordersFilter.ItemsPerPage > 0 {
+			args = append(args, ordersFilter.ItemsPerPage)
+			queryOrders = queryOrders + " LIMIT $" + strconv.Itoa(len(args))
 
-		if ordersFilter.Page > 0 {
-			args = append(args, ordersFilter.ItemsPerPage*ordersFilter.Page)
-			queryOrders = queryOrders + " OFFSET $" + strconv.Itoa(len(args))
+			if ordersFilter.Page > 0 {
+				args = append(args, ordersFilter.ItemsPerPage*ordersFilter.Page)
+				queryOrders = queryOrders + " OFFSET $" + strconv.Itoa(len(args))
+			}
+
 		}
+	*/
 
-	}
-
-	err = db.pool.QueryRow(ctx, queryOrders, args...).Scan(&count, &sum)
-	return count, sum, err
+	err = db.pool.QueryRow(ctx, queryOrders, args...).Scan(&count, &sum, &sum_with_tax)
+	return count, sum, sum_with_tax, err
 }
 
 type OrderDetails struct {
 	Id                 int        `json:"id"`
 	ContractorNumber   string     `json:"contractor_number"`
 	Sum                float64    `json:"sum"`
+	SumWithTax         float64    `json:"sum_with_tax"`
 	Status             string     `json:"status"`
 	OrderedDate        *time.Time `json:"ordered_date"`
 	ClosedDate         *time.Time `json:"closed_date"`
@@ -753,13 +760,16 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			oo.contractor_number, 
 			ds.date_shipped,
 			dd.date_delivered,
-			da.date_accepted
+			da.date_accepted,
+			ov.order_sum_with_tax
 		FROM order_order oo 
 			JOIN (
 				SELECT oo.id, 
-					round(((((sum((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)) * (((100)::numeric - oo.on_order_coupon))::double precision) / (100)::double precision) - (oo.on_order_coupon_fixed)::double precision))::numeric, 2) AS order_sum
-				FROM order_order oo 
-					JOIN order_orderitem oi ON (oo.id = oi.order_id)
+					ROUND((SUM(item_sum) * (100 - oo.on_order_coupon) / 100 - oo.on_order_coupon_fixed)::numeric, 2) order_sum,
+					ROUND((SUM(item_sum + ROUND((item_sum*rate_nds/100)::numeric, 2)) * (100 - oo.on_order_coupon) / 100 - oo.on_order_coupon_fixed)::numeric, 2) order_sum_with_tax
+					FROM order_order oo JOIN
+					(SELECT id, order_id, rate_nds, ROUND((oi.count * (((oi.item_price - oi.coupon_fixed) * (100 - oi.coupon_percent)) / 100))::numeric, 2) item_sum
+						FROM order_orderitem oi) oi ON oo.id = oi.order_id
 				GROUP BY oo.id
 			) ov USING (id)
 			LEFT JOIN (
@@ -812,10 +822,14 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 		}
 
 		id := int(values[0].(int32))
-		var sum float64
+		var sum, sum_with_tax float64
 		if values[1] != nil {
 			s := values[1].(pgtype.Numeric)
 			s.AssignTo(&sum)
+		}
+		if values[25] != nil {
+			s := values[25].(pgtype.Numeric)
+			s.AssignTo(&sum_with_tax)
 		}
 
 		status := values[2].(string)
@@ -855,6 +869,7 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			id,
 			contractor_number,
 			sum,
+			sum_with_tax,
 			status,
 			toTime(values[3]),
 			toTime(values[4]),
@@ -900,6 +915,7 @@ type OrderLine struct {
 	Comment       string  `json:"comment"`
 	Sum           float64 `json:"sum"`
 	Tax           float64 `json:"tax"`
+	SumWithTax    float64 `json:"sum_with_tax"`
 }
 
 func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (OrderLines, error) {
@@ -988,6 +1004,7 @@ func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId
 			comment,
 			sum,
 			math.Round(sum*nds) / 100,
+			sum + math.Round(sum*nds)/100,
 		}
 		orderDetails = append(orderDetails, entry)
 	}

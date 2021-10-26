@@ -52,6 +52,8 @@ definitions:
         type: string
       sum:
         type: number
+      sum_with_tax:
+        type: number
     type: object
   main.OrderLine:
     properties:
@@ -77,6 +79,8 @@ definitions:
         type: integer
       sum:
         type: number
+      sum_with_tax:
+        type: number
       tax:
         type: number
       warehouse:
@@ -91,6 +95,8 @@ definitions:
           $ref: '#/definitions/main.OrderDetails'
         type: array
       sum:
+        type: number
+      sum_with_tax:
         type: number
     type: object
 host: industrial.market
@@ -158,6 +164,14 @@ paths:
         in: query
         name: page
         type: integer
+      - description: Order status (Создан 1, В обработке 2, На согласовании 3, На
+          сборке 10, В пути 21, Доставлен 15, Приёмка 20, Принят 22, Завершён 24,
+          Отказ/Не согласован 4)
+        in: query
+        items:
+          type: integer
+        name: selectedStatuses[]
+        type: array
       produces:
       - application/json
       responses:

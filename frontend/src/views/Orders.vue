@@ -83,7 +83,7 @@
 					<th class="col-1 text-left">
 							#
 					</th>
-					<th class="col-6 text-left">
+					<th class="col-5 text-left">
 						<tr class="d-flex table-borderless m-0 p-0">
 							<td class="col-3 text-left m-0 p-0">Закупщик</td>
 							<td class="col-3 text-left m-0 p-0">Покупатель</td>
@@ -91,14 +91,19 @@
 							<td class="col-3 text-left m-0 p-0">Поставщик</td>
 						</tr>
 					</th>
-					<th class="col-5 text-left">
+					<th class="col-2 text-left">
+						<tr class="d-flex table-borderless m-0 p-0">
+							<th class="col-4 border-0 m-0 p-0">Cумма</th>
+							<th class="col-4 border-0 m-0 p-0">Cумма с НДС</th>
+							<th class="col-4 border-0 m-0 p-0">Статус</th>
+						</tr>
+					</th>
+					<th class="col-4 text-left">
 						<tr class="d-flex table-borderless">
-							<th class="col-2 p-0">Cумма</th>
-							<th class="col-2 p-0">Статус</th>
-							<td class="col-2 p-0">Создан</td>
-							<td class="col-2 p-0">Согласован</td>
-							<td class="col-2 p-0">Дата поставки</td>
-							<td class="col-2 p-0">Доставлен</td>
+							<td class="col-3 m-0 p-0">Создан</td>
+							<td class="col-3 m-0 p-0">Согласован</td>
+							<td class="col-3 m-0 p-0">Дата поставки</td>
+							<td class="col-3 m-0 p-0">Доставлен</td>
 						</tr>
 					</th>
 				</tr>
@@ -107,8 +112,8 @@
 					<th class="col-3 text-left m-0 p-0">Закупщик</th>
 					<th class="col-2 text-left m-0 p-0">Покупатель</th>
 					<th class="col-2 text-left m-0 p-0">Поставщик</th>
-					<th class="col-2 p-0">Cумма</th>
-					<th class="col-2 p-0">Статус</th>
+					<th class="col-2 m-0 p-0">Cумма</th>
+					<th class="col-2 m-0 p-0">Статус</th>
 				</tr>
 			</thead>
 			<tbody> 
@@ -117,7 +122,7 @@
 						<td class="col-1 text-left">
 								{{order.id}} {{order.contractor_number}}
 						</td>
-						<td class="col-6 text-left" :id="order.id">
+						<td class="col-5 text-left" :id="order.id">
 							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
 								<td class="col-3 text-left m-0 p-0">{{order.buyer}}</td>
 								<td class="col-3 text-left m-0 p-0">{{order.customer_name}}</td>
@@ -125,14 +130,19 @@
 								<td class="col-3 text-left m-0 p-0">{{order.seller_name}}</td>
 							</tr>
 						</td>
-						<td class="col-5 text-left" :id="order.id">
+						<td class="col-2 text-left" :id="order.id">
 							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
-								<td class="col-2 m-0 p-0">{{order.sum}}</td>
-								<td class="col-2 m-0 p-0">{{order.status}}</td>
-								<td class="col-2 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
-								<td class="col-2 m-0 p-0">{{formatDate(order.closed_date)}}</td>
-								<td class="col-2 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
-								<td class="col-2 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
+								<td class="col-4 m-0 p-0">{{order.sum}}</td>
+								<td class="col-4 m-0 p-0">{{order.sum_with_tax}}</td>
+								<td class="col-4 m-0 p-0">{{order.status}}</td>
+							</tr>
+						</td>
+						<td class="col-4 text-left" :id="order.id">
+							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
+								<td class="col-3 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
+								<td class="col-3 m-0 p-0">{{formatDate(order.closed_date)}}</td>
+								<td class="col-3 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
+								<td class="col-3 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
 							</tr>
 						</td>
 					</tr>
@@ -141,7 +151,7 @@
 						<td class="col-3 text-left m-0 p-0">{{order.buyer}}</td>
 						<td class="col-2 text-left m-0 p-0">{{order.customer_name}}</td>
 						<td class="col-2 text-left m-0 p-0">{{order.seller_name}}</td>
-						<td class="col-2 m-0 p-0">{{order.sum}}</td>
+						<td class="col-2 m-0 p-0">{{order.sum_with_nds}}</td>
 						<td class="col-2 m-0 p-0">{{order.status}}</td>
 					</tr>
 					<div class="accordian-body collapse" :id="'order' + index"> 
@@ -368,7 +378,7 @@ export default {
 				if('count' in  res.data)
 					this.totalOrders = res.data.count
 				if('sum' in res.data)
-					this.totalSum = res.data.sum
+					this.totalSum = res.data.sum_with_tax
 				this.loading = false
 				this.$nextTick(doubleRaf(() => this.onScroll()))
 			})
@@ -459,7 +469,7 @@ export default {
 			if (!(order_id in this.order_details)) {
 				axios({
 					method: "GET", 
-					url: "/methods/order/"+order_id,
+					url: "/methods/orders/"+order_id,
 				})      
 				.then(res => {
 					this.error_message = ""

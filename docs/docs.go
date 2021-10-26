@@ -109,6 +109,15 @@ var doc = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Order status (Создан 1, В обработке 2, На согласовании 3, На сборке 10, В пути 21, Доставлен 15, Приёмка 20, Принят 22, Завершён 24, Отказ/Не согласован 4)",
+                        "name": "selectedStatuses[]",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -200,6 +209,9 @@ var doc = `{
                 },
                 "sum": {
                     "type": "number"
+                },
+                "sum_with_tax": {
+                    "type": "number"
                 }
             }
         },
@@ -239,6 +251,9 @@ var doc = `{
                 "sum": {
                     "type": "number"
                 },
+                "sum_with_tax": {
+                    "type": "number"
+                },
                 "tax": {
                     "type": "number"
                 },
@@ -260,6 +275,9 @@ var doc = `{
                     }
                 },
                 "sum": {
+                    "type": "number"
+                },
+                "sum_with_tax": {
                     "type": "number"
                 }
             }

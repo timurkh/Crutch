@@ -89,7 +89,7 @@ func generatePassword(passwordLength, minSpecialChar, minNum, minUpperCase int) 
 
 func genApiLogin(userInfo UserInfo) string {
 
-	re := regexp.MustCompile(`(.*).[^.]+`)
+	re := regexp.MustCompile(`(.*)\.[^\.]+`)
 	sl := re.ReplaceAllString(userInfo.Email, "$1")
 	return slug.Make(sl)
 }

@@ -443,9 +443,10 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 }
 
 type Orders struct {
-	Orders []OrderDetails `json:"orders"`
-	Count  int            `json:"count"`
-	Sum    float64        `json:"sum"`
+	Orders     []OrderDetails `json:"orders"`
+	Count      int            `json:"count"`
+	Sum        float64        `json:"sum"`
+	SumWithTax float64        `json:"sum_with_tax"`
 }
 
 // @Summary List orders
@@ -458,6 +459,7 @@ type Orders struct {
 // @Param text query string false "Query used to filter orders, might be customer name, order number or buyer name"
 // @Param itemsPerPage query int false "Page size" default(10) minimum(1) maximum(10)
 // @Param page query int false "Page number" default(0)
+// @Param selectedStatuses[] query []int false "Order status (Создан 1, В обработке 2, На согласовании 3, На сборке 10, В пути 21, Доставлен 15, Приёмка 20, Принят 22, Завершён 24, Отказ/Не согласован 4)"
 // @Success 200 {object} Orders
 // @Router /orders/ [get]
 func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
@@ -493,12 +495,12 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 
 	if ordersFilter.Page == 0 {
-		count, sum, e := mh.prodDB.getOrdersSum(r.Context(), userInfo, ordersFilter)
+		count, sum, sum_with_tax, e := mh.prodDB.getOrdersSum(r.Context(), userInfo, ordersFilter)
 		if e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return e
 		}
-		err = json.NewEncoder(w).Encode(Orders{orders, count, sum})
+		err = json.NewEncoder(w).Encode(Orders{orders, count, sum, sum_with_tax})
 
 	} else {
 		err = json.NewEncoder(w).Encode(struct {
