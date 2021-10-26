@@ -3,7 +3,7 @@
 		{{ error_message }}
 	</div>
 
-	<div class="border m-3">
+	<div	v-if="user.company_admin || user.admin"  class="border m-3">
 		<div class="d-flex font-weight-bold flex-wrap m-1 mb-2">
 			Аутентификация
 		</div>
@@ -46,6 +46,9 @@
 				</div>
 			</div>
 		</form>
+	</div>
+	<div v-else  class="alert alert-secondary m-1 p-1 text-wrap text-break" role="alert">
+		Доступ к логину и паролю для работы с API есть у пользователя-администратора вашей компании.
 	</div>
 
 	<div style="margin:20px;">
@@ -99,17 +102,19 @@ export default {
 	},
 	created() {
 	
-			axios({
-				method: "GET", 
-				url: "/methods/apiCredentials"
-			})      
-			.then(res => {
-				this.api =res.data
-			})
-			.catch(error => {
-				this.error_message = "Не удалось загрузить реквизиты API: " + this.getAxiosErrorMessage(error)
-				this.api = []
-			})
+		if(this.user.admin || this.user.company_admin) {
+				axios({
+					method: "GET", 
+					url: "/methods/apiCredentials"
+				})      
+				.then(res => {
+					this.api =res.data
+				})
+				.catch(error => {
+					this.error_message = "Не удалось загрузить реквизиты API: " + this.getAxiosErrorMessage(error)
+					this.api = []
+				})
+		}
 	
 	},
   methods: {

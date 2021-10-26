@@ -850,7 +850,7 @@ func (mh *MethodHandlers) getApiCredentials(w http.ResponseWriter, r *http.Reque
 
 	userInfo := mh.auth.getUserInfo(r)
 
-	if !userInfo.CompanyAdmin {
+	if !userInfo.CompanyAdmin && !userInfo.Admin {
 		err := fmt.Errorf("This resource requires company admin privileges")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return err
@@ -881,7 +881,7 @@ func (mh *MethodHandlers) putApiCredentials(w http.ResponseWriter, r *http.Reque
 
 	userInfo := mh.auth.getUserInfo(r)
 
-	if !userInfo.CompanyAdmin {
+	if !userInfo.CompanyAdmin && !userInfo.Admin {
 		err := fmt.Errorf("This resource requires company admin privileges")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return err

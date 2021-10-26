@@ -500,8 +500,9 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 					ON (object_id = cac.contractor_id AND content_type_id=79)
 		)s 
 		`
+	query += ` WHERE TRUE `
 	if filter.Verified {
-		query += ` WHERE user_count>0 `
+		query += ` AND user_count>0 `
 	}
 
 	if !userInfo.Admin {
