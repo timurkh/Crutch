@@ -26,6 +26,12 @@
 				</VueMultiselect>
 			</div>
 			<div class="form-inline form-check m-1 p-0">
+				<input class="" type="checkbox" value="" id="verified" v-model="filter.verified" @change="onChange">
+				<label class="form-check-label m-1" for="verified">
+					Верифицированные
+				</label>
+			</div>
+			<div class="form-inline form-check m-1 p-0">
 				<input class="" type="checkbox" value="" id="haveOrders" v-model="filter.haveOrders" @change="onChange">
 				<label class="form-check-label m-1" for="haveOrders">
 					Есть заказы
@@ -76,36 +82,47 @@
 							<td class="col-3 text-left m-0 p-0">КПП</td>
 						</tr>
 					</th>
-					<th class="col-3 text-left">Адрес</th>
-					<th class="col-1">Роль</th>
-					<th class="col-1" role="button" @click="switchSorting('user_count')">
-						<div class="d-flex flex-row">
-							<div>Пользователей</div>
-							<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
-							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
-						</div>
-					</th>
-					<th class="col-3 text-left">
+					<th class="col-2 text-left">Адрес</th>
+					<th class="col-3">
 						<tr class="d-flex table-borderless m-0 p-0">
-							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('date_joined')">
-								<div class="d-flex flex-row">
-									<div>Присоединился</div>
-									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
-									<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
-								</div>
-							</td>
-							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('last_login')">
-								<div class="d-flex flex-row">
-									<div>Появлялся</div>
-									<div v-if="(sortingColumn==='last_login' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
-									<div v-if="(sortingColumn==='last_login' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+							<td class="col-4 m-0 p-0">Роль</td>
+							<td class="col-4 m-0 p-0"  role="button" @click="switchSorting('user_count')">
+								<div class="d-flex flex-row justify-content-center">
+									<div>Пользователей</div>
+									<div v-if="(sortingColumn==='user_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 								</div>
 							</td>
 							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('order_count')">
-								<div class="d-flex flex-row">
+								<div class="d-flex flex-row justify-content-center">
 									<div>Заказов</div>
 									<div v-if="(sortingColumn==='order_count' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
 									<div v-if="(sortingColumn==='order_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
+						</tr>
+					</th>
+					<th class="col-3">
+						<tr class="d-flex table-borderless m-0 p-0">
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('date_created')">
+								<div class="d-flex flex-row justify-content-center">
+									<div>Присоединился</div>
+									<div v-if="(sortingColumn==='date_created' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='date_created' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('date_verified')">
+								<div class="d-flex flex-row justify-content-center">
+									<div>Верифицирован</div>
+									<div v-if="(sortingColumn==='date_verified' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='date_verified' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+								</div>
+							</td>
+							<td class="col-4 m-0 p-0" role="button" @click="switchSorting('last_login')">
+								<div class="d-flex flex-row justify-content-center">
+									<div>Появлялся</div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+									<div v-if="(sortingColumn==='last_login' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 								</div>
 							</td>
 						</tr>
@@ -122,11 +139,11 @@
 							<div v-if="(sortingColumn==='user_count' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 						</div>
 					</th>
-					<th class="col-2" role="button" @click="switchSorting('date_joined')">
+					<th class="col-2" role="button" @click="switchSorting('date_created')">
 						<div class="d-flex flex-row">
 							<div>Присоединился</div>
-							<div v-if="(sortingColumn==='date_joined' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
-							<div v-if="(sortingColumn==='date_joined' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
+							<div v-if="(sortingColumn==='date_created' && sortingDirection==='up')" class="m-1"><i class="fas fa-sort-up"></i></div>
+							<div v-if="(sortingColumn==='date_created' && sortingDirection==='down')" class="m-1"><i class="fas fa-sort-down"></i></div>
 						</div>
 					</th>
 					<th class="col-2" role="button" @click="switchSorting('order_count')">
@@ -149,14 +166,19 @@
 								<td class="col-3 text-left m-0 p-0">{{cp.kpp}}</td>
 							</tr>
 						</td>
-						<td class="col-3">{{cp.address}}</td>
-						<td class="col-1">{{cp.role}}</td>
-						<td class="col-1">{{cp.user_count}}</td>
-						<td class="col-3 text-left" :id="cp.id">
+						<td class="col-2">{{cp.address}}</td>
+						<td class="col-3 " :id="cp.id">
 							<tr class="d-flex table-borderless m-0 p-0" :id="cp.id">
-								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.date_joined)}}</td>
-								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.last_login)}}</td>
+								<td class="col-4 m-0 p-0">{{cp.role}}</td>
+								<td class="col-4 m-0 p-0">{{cp.user_count}}</td>
 								<td class="col-4 m-0 p-0">{{cp.order_count}}</td>
+							</tr>
+						</td>
+						<td class="col-3 " :id="cp.id">
+							<tr class="d-flex table-borderless m-0 p-0" :id="cp.id">
+								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.date_created)}}</td>
+								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.date_verified)}}</td>
+								<td class="col-4 m-0 p-0">{{formatDateOnly(cp.last_login)}}</td>
 							</tr>
 						</td>
 					</tr>
@@ -165,7 +187,7 @@
 						<td class="col-3 text-left">{{cp.name}}</td>
 						<td class="col-2">{{cp.role}}</td>
 						<td class="col-2">{{cp.user_count}}</td>
-						<td class="col-2">{{formatDateOnly(cp.date_joined)}}</td>
+						<td class="col-2">{{formatDateOnly(cp.date_created)}}</td>
 						<td class="col-2">{{cp.order_count}}</td>
 					</tr>
 				</div>
@@ -220,6 +242,7 @@ export default {
         end: new Date(),
 				role: null,
 				text: "",
+				verified: true,
       },
 			filterNormalized: {},
 			roles: [
@@ -237,11 +260,11 @@ export default {
 				ret += " "
 				ret += this.declOfNum(this.totalSellers, ["поставщик", "поставщика", "поставщиков"])
 
-				if(this.totalBuers > 0)
+				if(this.totalBuyers > 0)
 					ret += ", "
 			}
 			
-			if(this.totalBuers > 0) {
+			if(this.totalBuyers > 0) {
 				ret += this.totalBuyers
 				ret += " "
 				ret += this.declOfNum(this.totalBuyers, ["покупатель", "покупателя", "покупателей"])
@@ -305,15 +328,27 @@ export default {
 			this.sortResults()
 		},
 		sortResults() {
-			if (this.sortingDirection == "down") {
-				this.counterparts.sort((b, a) => (a[this.sortingColumn] > b[this.sortingColumn]) ? 1 : ((b[this.sortingColumn] > a[this.sortingColumn]) ? -1 : 0))
-			}
-			else if (this.sortingDirection == "up") {
-				this.counterparts.sort((a, b) => (a[this.sortingColumn] > b[this.sortingColumn]) ? 1 : ((b[this.sortingColumn] > a[this.sortingColumn]) ? -1 : 0))
-			}
-			else {
+			var one = 1;
+			if (this.sortingDirection == "up") 
+				one = -1;
+			
+			if(this.sortingDirection == "up" || this.sortingDirection == "down")
+				this.counterparts.sort((b, a) => { 
+					var ret
+					if(a[this.sortingColumn] == null)
+						ret = one
+					else if(b[this.sortingColumn] == null)
+						ret = -1*one
+					else if (a[this.sortingColumn] > b[this.sortingColumn])
+						ret = one 
+					else if (b[this.sortingColumn] > a[this.sortingColumn]) 
+						ret = -1*one
+					else 
+						ret = 0; 
+					return ret; 
+				})
+			else 
 				this.counterparts.sort((a, b) => (a.id > b.id) ? 1 : ((b.id > a.id) ? -1 : 0))
-			}
 		},
 		formatDateOnly(d) {
 			if(d != null)

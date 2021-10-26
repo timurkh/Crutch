@@ -19,6 +19,7 @@ type CounterpartsFilter struct {
 	Text       string    `schema:"text"`
 	Role       int       `schema:"role"`
 	HaveOrders bool      `schema:"haveOrders"`
+	Verified   bool      `schema:"verified"`
 }
 
 type OrdersFilter struct {
@@ -429,10 +430,15 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 					WHEN content_type_id=186 THEN supplier_user_count
 					ELSE 0 
 				END AS user_count,
-				CASE WHEN content_type_id=79 THEN contractor_date_joined 
-					WHEN content_type_id=186 THEN supplier_date_joined
+				CASE 
+					WHEN content_type_id=79 THEN c.created_at
+					WHEN content_type_id=186 THEN s.created_at
 					ELSE NULL 
-				END AS date_joined,
+				END AS date_created,
+				CASE WHEN content_type_id=79 THEN contractor_date_verified 
+					WHEN content_type_id=186 THEN supplier_date_verified
+					ELSE NULL 
+				END AS date_verified,
 				CASE WHEN content_type_id=79 THEN contractor_last_login 
 					WHEN content_type_id=186 THEN supplier_last_login
 					ELSE NULL 
@@ -465,10 +471,10 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 					ELSE NULL
 				END AS admin
 			FROM company_company cc
-				LEFT JOIN (SELECT COUNT(*) supplier_user_count, MIN(date_joined) AS supplier_date_joined, MAX(last_login) AS supplier_last_login, supplier_id 
+				LEFT JOIN (SELECT COUNT(*) supplier_user_count,  MIN(date_joined) supplier_date_verified, MAX(last_login) AS supplier_last_login, supplier_id 
 					FROM core_user WHERE verified=TRUE AND blocked=FALSE GROUP BY supplier_id) cu 
 					ON (object_id = cu.supplier_id AND content_type_id=186) 
-				LEFT JOIN (SELECT COUNT (*) contractor_user_count, MIN(date_joined) contractor_date_joined, MAX(last_login) contractor_last_login, contractor_id 
+				LEFT JOIN (SELECT COUNT (*) contractor_user_count, MIN(date_joined) contractor_date_verified, MAX(last_login) contractor_last_login, contractor_id 
 					FROM core_user_contractors JOIN core_user cu ON (cu.id = user_id AND verified=TRUE and blocked=FALSE) GROUP BY contractor_id) cuc 
 					ON (object_id=cuc.contractor_id AND content_type_id=79)
 				LEFT JOIN (SELECT COUNT (*) supplier_order_count, supplier_id FROM order_order WHERE id NOT IN (1, 17, 18) `
@@ -479,7 +485,9 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 	query += dateFilter
 	query += ` GROUP BY contractor_id) co
 					ON (object_id = co.contractor_id AND content_type_id=79)
+				LEFT JOIN supplier_supplier s ON s.id = cc.object_id and content_type_id=186
 				LEFT JOIN supplier_supplierprofile ss ON cc.object_id = ss.supplier_id and content_type_id=186
+				LEFT JOIN contractor_contractor c ON c.id = cc.object_id and content_type_id=79
 				LEFT JOIN company_country ON company_country.id = ss.country_id
 				LEFT JOIN company_city ON company_city.id = ss.city_id
 				LEFT JOIN (SELECT u.supplier_id, json_object_agg (u.id, json_build_object('name', concat_ws(' ', first_name, middle_name, last_name), 'email', u.email, 'phone', u.phone)) AS supplier_admin 
@@ -490,7 +498,11 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 					FROM core_user u JOIN core_user_contractors cc ON u.id = cc.user_id 
 					WHERE u.company_admin=TRUE GROUP BY cc.contractor_id) cac 
 					ON (object_id = cac.contractor_id AND content_type_id=79)
-		)s WHERE user_count>0 `
+		)s 
+		`
+	if filter.Verified {
+		query += ` WHERE user_count>0 `
+	}
 
 	if !userInfo.Admin {
 		query += " AND role_id IN (0"
@@ -544,29 +556,30 @@ func (db *ProdDBHelper) getCounterparts(ctx context.Context, userInfo UserInfo, 
 			"address":        values[5],
 			"role":           values[6],
 			"user_count":     values[7],
-			"date_joined":    values[8],
-			"last_login":     values[9],
-			"order_count":    values[10],
-			"ogrn":           toString(values[11]),
-			"actual_address": values[12],
-			"director_name":  toString(values[13]),
-			"contact_name":   toString(values[14]),
-			"phone":          toString(values[15]),
-			"bank":           toString(values[16]),
-			"bik":            toString(values[17]),
-			"corr_account":   toString(values[18]),
-			"pay_account":    toString(values[19]),
-			"extra_data":     toString(values[20]),
-			"account":        toString(values[21]),
-			"bank_phone":     toString(values[22]),
-			"IBAN":           toString(values[23]),
-			"SWIFT":          toString(values[24]),
-			"country":        toString(values[25]),
-			"city":           toString(values[26]),
-			"seller_email":   toString(values[27]),
-			"seller_site":    toString(values[28]),
-			"seller_phone":   toString(values[29]),
-			"admins":         values[30],
+			"date_created":   values[8],
+			"date_verified":  values[9],
+			"last_login":     values[10],
+			"order_count":    values[11],
+			"ogrn":           toString(values[12]),
+			"actual_address": values[13],
+			"director_name":  toString(values[14]),
+			"contact_name":   toString(values[15]),
+			"phone":          toString(values[16]),
+			"bank":           toString(values[17]),
+			"bik":            toString(values[18]),
+			"corr_account":   toString(values[19]),
+			"pay_account":    toString(values[20]),
+			"extra_data":     toString(values[21]),
+			"account":        toString(values[22]),
+			"bank_phone":     toString(values[23]),
+			"IBAN":           toString(values[24]),
+			"SWIFT":          toString(values[25]),
+			"country":        toString(values[26]),
+			"city":           toString(values[27]),
+			"seller_email":   toString(values[28]),
+			"seller_site":    toString(values[29]),
+			"seller_phone":   toString(values[30]),
+			"admins":         values[31],
 		}
 
 		counterparts = append(counterparts, entry)
