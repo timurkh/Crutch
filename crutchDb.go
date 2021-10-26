@@ -147,7 +147,7 @@ func (db *CrutchDBHelper) updateApiCredentialsPassword(userInfo UserInfo) (*ApiC
 func (db *CrutchDBHelper) getUserCredsFromApiLogin(login string) (int, string, error) {
 	var password string
 	var user_id int
-	err := db.pool.QueryRow(context.Background(), "SELECT user_id, password FROM api_credentials WHERE login=$1", login).Scan(&user_id, &password)
+	err := db.pool.QueryRow(context.Background(), "SELECT user_id, password FROM api_credentials WHERE login=$1 AND enabled=true", login).Scan(&user_id, &password)
 
 	return user_id, password, err
 }

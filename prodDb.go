@@ -300,7 +300,6 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 	if userInfo.SupplierId != 0 {
 		args = append(args, userInfo.SupplierId)
 		query += " AND supplier_id=$" + strconv.Itoa(len(args))
-		query += " AND status_id NOT IN (18, 26, 23, 24, 26)"
 	} else if supplier != "" {
 		args = append(args, "%"+supplier+"%")
 		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args))
@@ -585,6 +584,7 @@ func (db *ProdDBHelper) ordersAccessRightsFilter(userInfo UserInfo) (string, []i
 			args = append(args, userInfo.SupplierId)
 			filterUsers = ` AND oo.supplier_id = $`
 			filterUsers += strconv.Itoa(len(args))
+			filterUsers += " AND oo.status_id NOT IN (18, 26, 23, 24, 26)"
 		} else if userInfo.CompanyAdmin {
 
 			args = append(args, userInfo.Id)
