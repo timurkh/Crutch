@@ -93,27 +93,6 @@ info:
   title: Industrial.Market API
   version: "1.0"
 paths:
-  /order/{orderId}:
-    get:
-      description: Get order itemslist
-      parameters:
-      - description: Order Id
-        in: path
-        name: orderId
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/main.OrderLine'
-            type: array
-      summary: List order lines
-      tags:
-      - order
   /orders/:
     get:
       description: Get orders list
@@ -170,6 +149,27 @@ paths:
       summary: List orders
       tags:
       - orders
+  /orders/{orderId}:
+    get:
+      description: Get order itemslist
+      parameters:
+      - description: Order Id
+        in: path
+        name: orderId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.OrderLine'
+            type: array
+      summary: List order lines
+      tags:
+      - order
 securityDefinitions:
   BasicAuth:
     type: basic

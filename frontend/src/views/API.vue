@@ -145,6 +145,7 @@ export default {
 			return axios({
 				method: "PUT", 
 				url: "/methods/apiCredentials",
+				headers: { "X-CSRF-Token": this.user.csrf },
 				data: {
 					password : true
 				}

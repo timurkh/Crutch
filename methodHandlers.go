@@ -523,7 +523,7 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 // @Tags order
 // @Produce  json
 // @Success 200 {object} OrderLines
-// @Router /order/{orderId} [get]
+// @Router /orders/{orderId} [get]
 func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request) error {
 
 	userInfo := mh.auth.getUserInfo(r)
