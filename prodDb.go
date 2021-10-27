@@ -153,7 +153,22 @@ func (db *ProdDBHelper) getSupplierCities(ctx context.Context, supplierId int) (
 	return cities, rows.Err()
 }
 
-func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []map[string]interface{}, err error) {
+type SearchResultEntry struct {
+	Id             int     `json:"id"`
+	Category       string  `json:"category"`
+	Code           string  `json:"code"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	Rest           float64 `json:"rest"`
+	Price          float64 `json:"price"`
+	Supplier       string  `json:"supplier"`
+	Image          string  `json:"image"`
+	ModificationId int     `json:"modification_id"`
+	WarehouseId    int     `json:"warehouse_id"`
+	Score          float64 `json:"score"`
+}
+
+func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int, products_score map[int]float64, userInfo UserInfo, city_id int, inStockOnly bool, supplier string) (products []SearchResultEntry, err error) {
 
 	args := []interface{}{product_ids}
 
@@ -310,7 +325,7 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 
 	rows, _ := db.pool.Query(ctx, query, args...)
 
-	products = make([]map[string]interface{}, 0)
+	products = make([]SearchResultEntry, 0)
 	for rows.Next() {
 		var category, name, code, description, supplier string
 		var price float64
@@ -338,20 +353,20 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 			supplier = toString(values[7])
 		}
 
-		entry := map[string]interface{}{
-			"id":              id,
-			"category":        category,
-			"code":            code,
-			"name":            name,
-			"description":     description,
-			"rest":            toFloat(values[5]),
-			"price":           price,
-			"supplier":        supplier,
-			"image":           toString(values[8]),
-			"modification_id": toInt(values[9]),
-			"warehouse_id":    toInt(values[10]),
+		entry := SearchResultEntry{
+			id,
+			category,
+			code,
+			name,
+			description,
+			toFloat(values[5]),
+			price,
+			supplier,
+			toString(values[8]),
+			toInt(values[9]),
+			toInt(values[10]),
+			products_score[id],
 		}
-		entry["score"] = products_score[id]
 		products = append(products, entry)
 	}
 

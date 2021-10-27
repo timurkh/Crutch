@@ -37,14 +37,13 @@ type City struct {
 }
 
 type AuthMiddleware struct {
-	es       *ElasticHelper
 	prodDB   *ProdDBHelper
 	crutchDB *CrutchDBHelper
 }
 
-func initAuthMiddleware(es *ElasticHelper, db *ProdDBHelper, crutchDB *CrutchDBHelper) *AuthMiddleware {
+func initAuthMiddleware(db *ProdDBHelper, crutchDB *CrutchDBHelper) *AuthMiddleware {
 
-	au := AuthMiddleware{es, db, crutchDB}
+	au := AuthMiddleware{db, crutchDB}
 
 	return &au
 }
@@ -79,7 +78,7 @@ func (auth *AuthMiddleware) checkBasicAuth(w http.ResponseWriter, r *http.Reques
 	username, password, ok := r.BasicAuth()
 	if ok {
 
-		userId, expectedPassword, err := auth.crutchDB.getUserCredsFromApiLogin(username)
+		userId, expectedPassword, err := auth.crutchDB.getUserCredsFromApiLogin(r.Context(), username)
 
 		if err != nil {
 			return nil, fmt.Errorf("Failed to find username %s", username)
@@ -209,8 +208,4 @@ func (auth *AuthMiddleware) loadUserInfo(w http.ResponseWriter, r *http.Request,
 	gorilla_context.Set(r, "UserInfo", *ui)
 
 	return nil
-}
-
-func (auth *AuthMiddleware) getUserInfo(r *http.Request) UserInfo {
-	return gorilla_context.Get(r, "UserInfo").(UserInfo)
 }

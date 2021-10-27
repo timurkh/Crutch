@@ -26,7 +26,7 @@ import (
 // @BasePath /crutch/methods
 // @securityDefinitions.basic BasicAuth
 
-var log *logrus.Logger
+var log = logrus.New()
 
 // trick to conver my functions to http.Handler
 type appHandler func(http.ResponseWriter, *http.Request) error
@@ -45,21 +45,7 @@ func getEnv(key string, defaultVal string) string {
 	return defaultVal
 }
 
-func main() {
-	log = logrus.New()
-	log.SetReportCaller(true)
-	log.SetLevel(logrus.TraceLevel)
-	log.Formatter = &logrus.TextFormatter{
-		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
-			filename := path.Base(f.File)
-			return "", fmt.Sprintf("%s:%d", filename, f.Line)
-		},
-	}
-
-	port := getEnv("PORT", "3001")
-	baseUrl := getEnv("BASEURL", "crutchdev")
-	docs.SwaggerInfo.BasePath = "/" + baseUrl + "/methods"
-	standinUrl := getEnv("STANDINURL", "standindev")
+func initAuthMethodHandlers() (*MethodHandlers, *AuthMiddleware, error) {
 
 	elastic := getEnv("ELASTIC", "http://10.130.0.21:9400")
 
@@ -75,23 +61,45 @@ func main() {
 
 	es, err := initElasticHelper(elastic)
 	if err != nil {
-		log.Fatalf("Failed to init Elastic connection: %v\n", err)
+		return nil, nil, fmt.Errorf("Failed to init Elastic connection: %v\n", err)
 	}
 
 	prodDB, err := initProdDBHelper(prodDBHost, prodDBUser, prodDBPswd, prodDBDtbs)
 	if err != nil {
-		log.Fatalf("Failed to init DB connection: %v\n", err)
+		return nil, nil, fmt.Errorf("Failed to init DB connection: %v\n", err)
 	}
 
 	crutchDB, err := initCrutchDBHelper(crutchDBHost, crutchDBUser, crutchDBPswd, crutchDBDtbs)
 	if err != nil {
-		log.Fatalf("Failed to init DB connection: %v\n", err)
+		return nil, nil, fmt.Errorf("Failed to init DB connection: %v\n", err)
 	}
 
-	_ = crutchDB
+	auth := initAuthMiddleware(prodDB, crutchDB)
+	methods := initMethodHandlers(es, prodDB, crutchDB)
 
-	auth := initAuthMiddleware(es, prodDB, crutchDB)
-	methods := initMethodHandlers(auth, es, prodDB, crutchDB)
+	return methods, auth, nil
+}
+
+func main() {
+	log.SetReportCaller(true)
+	log.SetLevel(logrus.TraceLevel)
+	log.Formatter = &logrus.TextFormatter{
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			filename := path.Base(f.File)
+			return "", fmt.Sprintf("%s:%d", filename, f.Line)
+		},
+	}
+
+	port := getEnv("PORT", "3001")
+	baseUrl := getEnv("BASEURL", "crutchdev")
+	docs.SwaggerInfo.BasePath = "/" + baseUrl + "/methods"
+	standinUrl := getEnv("STANDINURL", "standindev")
+
+	methods, auth, err := initAuthMethodHandlers()
+
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
 
 	router := mux.NewRouter().StrictSlash(true)
 	CSRF := csrf.Protect(
@@ -112,8 +120,8 @@ func main() {
 	crutchMethods.Methods("GET").Path("/orders/excel").Handler(appHandler(methods.getOrdersExcelHandler))
 	crutchMethods.Methods("GET").Path("/orders/{orderId}").Handler(appHandler(methods.getOrderHandler))
 	crutchMethods.Methods("GET").Path("/currentUser").Handler(appHandler(methods.getCurrentUser))
-	crutchMethods.Methods("GET").Path("/apiCredentials").Handler(appHandler(methods.getApiCredentials))
-	crutchMethods.Methods("PUT").Path("/apiCredentials").Handler(appHandler(methods.putApiCredentials))
+	crutchMethods.Methods("GET").Path("/apiCredentials").Handler(appHandler(methods.getApiCredentialsHandler))
+	crutchMethods.Methods("PUT").Path("/apiCredentials").Handler(appHandler(methods.putApiCredentialsHandler))
 
 	crutch := router.PathPrefix("/" + baseUrl).Subrouter()
 

@@ -15,20 +15,21 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/xuri/excelize/v2"
+
+	gorilla_context "github.com/gorilla/context"
 )
 
 const itemsPerPage = 200
 
 type MethodHandlers struct {
-	auth     *AuthMiddleware
 	es       *ElasticHelper
 	prodDB   *ProdDBHelper
 	crutchDB *CrutchDBHelper
 }
 
-func initMethodHandlers(auth *AuthMiddleware, es *ElasticHelper, db *ProdDBHelper, crutchDb *CrutchDBHelper) *MethodHandlers {
+func initMethodHandlers(es *ElasticHelper, db *ProdDBHelper, crutchDb *CrutchDBHelper) *MethodHandlers {
 
-	mh := MethodHandlers{auth, es, db, crutchDb}
+	mh := MethodHandlers{es, db, crutchDb}
 
 	return &mh
 }
@@ -38,58 +39,91 @@ func stripSpecialSymbols(s string) string {
 	return re.ReplaceAllString(s, " ")
 }
 
-func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.Request) (err error) {
+type SearchResults struct {
+	UserInfo
+	Cities     []City              `json:"cities"`
+	Page       int                 `json:"page"`
+	TotalPages int                 `json:"totalPages"`
+	Results    []SearchResultEntry `json:"results"`
+}
 
-	userInfo := mh.auth.getUserInfo(r)
+func (mh *MethodHandlers) getUserInfo(r *http.Request) UserInfo {
+	return gorilla_context.Get(r, "UserInfo").(UserInfo)
+}
 
-	var cities []City
+func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.Request) error {
 
-	if !userInfo.Admin {
-		cities, err = mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
-		if err != nil {
-			err = fmt.Errorf("Failed to get consignee cities: %s", err.Error())
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return err
-		}
-
-		if len(cities) == 0 && userInfo.SupplierId != 0 {
-			cities, err = mh.prodDB.getSupplierCities(r.Context(), userInfo.SupplierId)
-		}
-
-		if len(cities) == 0 {
-			err = fmt.Errorf("Current user does not have any warehouses assigned")
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return err
-		}
-	}
+	userInfo := mh.getUserInfo(r)
 
 	var searchQuery SearchQuery
 	decoder := schema.NewDecoder()
 	decoder.IgnoreUnknownKeys(true)
-	err = decoder.Decode(&searchQuery, r.URL.Query())
+	err := decoder.Decode(&searchQuery, r.URL.Query())
 	if err != nil {
 		err = fmt.Errorf("Failed to decode search params: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
 
+	sr, err, status := mh.searchProducts(r.Context(), userInfo, searchQuery)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	err = json.NewEncoder(w).Encode(sr)
+	if err != nil {
+		err = fmt.Errorf("Error while preparing json reponse: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return nil
+}
+
+func (mh *MethodHandlers) searchProducts(ctx context.Context, userInfo UserInfo, searchQuery SearchQuery) (sr *SearchResults, err error, status int) {
+
 	log.Info(fmt.Printf("Handling search request text=%s, category=%s, code=%s, name=%s, property=%s, page=%v\n", searchQuery.Text, searchQuery.Category, searchQuery.Code, searchQuery.Name, searchQuery.Property, searchQuery.Page))
+
+	var cities []City
+
+	if !userInfo.Admin {
+		cities, err = mh.prodDB.getUserConsigneeCities(ctx, userInfo)
+		if err != nil {
+			err = fmt.Errorf("Failed to get consignee cities: %s", err.Error())
+			return nil, err, http.StatusBadRequest
+		}
+
+		if len(cities) == 0 && userInfo.SupplierId != 0 {
+			cities, err = mh.prodDB.getSupplierCities(ctx, userInfo.SupplierId)
+			if err != nil {
+				return nil, err, http.StatusInternalServerError
+			}
+		}
+
+		if len(cities) == 0 {
+			err = fmt.Errorf("Current user does not have any warehouses assigned")
+			return nil, err, http.StatusBadRequest
+		}
+	}
+
 	totalPages := 0
-	entries := make([]map[string]interface{}, 0)
+	entries := make([]SearchResultEntry, 0)
 	tries := 0
 	for {
 		tries++
 
-		hits, totalPages_, err := mh.es.search(&searchQuery, r.Context())
+		hits, totalPages_, err := mh.es.search(&searchQuery, ctx)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return err
+			return nil, err, http.StatusInternalServerError
 		}
 
-		entries_, err := mh.getResponseEntries(r.Context(), hits, userInfo, searchQuery.CityID, searchQuery.InStockOnly, searchQuery.Supplier)
+		entries_, err := mh.getResponseEntries(ctx, hits, userInfo, searchQuery.CityID, searchQuery.InStockOnly, searchQuery.Supplier)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return err
+			return nil, err, http.StatusInternalServerError
 		}
 
 		entries = append(entries, entries_...)
@@ -103,28 +137,10 @@ func (mh *MethodHandlers) searchProductsHandler(w http.ResponseWriter, r *http.R
 
 	log.Info("Have done ", tries, " queries to get ", len(entries), " product entries")
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	err = json.NewEncoder(w).Encode(struct {
-		UserInfo
-		Cities     []City      `json:"cities"`
-		Page       int         `json:"page"`
-		TotalPages int         `json:"totalPages"`
-		Results    interface{} `json:"results"`
-	}{userInfo, cities, searchQuery.Page, totalPages, entries})
-
-	if err != nil {
-		err = fmt.Errorf("Error while preparing json reponse: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	return nil
-
+	return &SearchResults{userInfo, cities, searchQuery.Page, totalPages, entries}, nil, http.StatusOK
 }
 
-func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interface{}, userInfo UserInfo, cityId int, inStockOnly bool, supplier string) ([]map[string]interface{}, error) {
+func (mh *MethodHandlers) getResponseEntries(ctx context.Context, hits []interface{}, userInfo UserInfo, cityId int, inStockOnly bool, supplier string) ([]SearchResultEntry, error) {
 
 	ids := make([]int, len(hits))
 
@@ -202,7 +218,7 @@ func (mh *MethodHandlers) getResponseEntriesFromElastic(hits []interface{}) []ma
 
 func (mh *MethodHandlers) getCurrentUser(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 	cities, err := mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
 	if len(cities) == 0 && userInfo.SupplierId != 0 {
 		cities, err = mh.prodDB.getSupplierCities(r.Context(), userInfo.SupplierId)
@@ -241,7 +257,7 @@ func (mh *MethodHandlers) getCounterpartsHandler(w http.ResponseWriter, r *http.
 		return err
 	}
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 
 	if !userInfo.Admin && !userInfo.Staff {
 		log.Error("Insufficient privileges to get list of counterparts")
@@ -285,7 +301,7 @@ func (mh *MethodHandlers) getCounterpartsExcelHandler(w http.ResponseWriter, r *
 		return err
 	}
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 
 	if !userInfo.Admin && !userInfo.Staff {
 		log.Error("Insufficient privileges to get excel with list of counterparts")
@@ -464,6 +480,8 @@ type Orders struct {
 // @Router /orders/ [get]
 func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Request) error {
 
+	userInfo := mh.getUserInfo(r)
+
 	var ordersFilter OrdersFilter
 	decoder := schema.NewDecoder()
 	decoder.IgnoreUnknownKeys(true)
@@ -474,39 +492,16 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 		return err
 	}
 
-	if ordersFilter.ItemsPerPage <= 0 {
-		ordersFilter.ItemsPerPage = 10
-	}
-	if ordersFilter.ItemsPerPage > 1000 {
-		ordersFilter.ItemsPerPage = 1000
-	}
-
-	userInfo := mh.auth.getUserInfo(r)
-
-	log.Info("Getting list of orders, filter ", ordersFilter)
-
-	orders, err := mh.prodDB.getOrders(r.Context(), userInfo, ordersFilter)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if ordersFilter.Page == 0 {
-		count, sum, sum_with_tax, e := mh.prodDB.getOrdersSum(r.Context(), userInfo, ordersFilter)
-		if e != nil {
-			http.Error(w, e.Error(), http.StatusInternalServerError)
-			return e
-		}
-		err = json.NewEncoder(w).Encode(Orders{orders, count, sum, sum_with_tax})
-
-	} else {
-		err = json.NewEncoder(w).Encode(struct {
-			Orders interface{} `json:"orders"`
-		}{orders})
+	orders, err, code := mh.getOrders(r.Context(), userInfo, ordersFilter)
+	if err != nil {
+		http.Error(w, err.Error(), code)
+		return err
 	}
+
+	err = json.NewEncoder(w).Encode(orders)
 
 	if err != nil {
 		err = fmt.Errorf("Error while preparing json reponse: %v", err)
@@ -515,6 +510,34 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	return nil
+}
+
+func (mh *MethodHandlers) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (*Orders, error, int) {
+
+	if ordersFilter.ItemsPerPage <= 0 {
+		ordersFilter.ItemsPerPage = 10
+	}
+	if ordersFilter.ItemsPerPage > 1000 {
+		ordersFilter.ItemsPerPage = 1000
+	}
+
+	log.Info("Getting list of orders, filter ", ordersFilter)
+
+	ordersList, err := mh.prodDB.getOrders(ctx, userInfo, ordersFilter)
+	if err != nil {
+		return nil, err, http.StatusInternalServerError
+	}
+
+	orders := Orders{Orders: ordersList}
+
+	if ordersFilter.Page == 0 {
+		orders.Count, orders.Sum, orders.SumWithTax, err = mh.prodDB.getOrdersSum(ctx, userInfo, ordersFilter)
+		if err != nil {
+			return nil, err, http.StatusInternalServerError
+		}
+	}
+	return &orders, nil, http.StatusOK
+
 }
 
 // @Summary List order lines
@@ -526,7 +549,7 @@ func (mh *MethodHandlers) getOrdersHandler(w http.ResponseWriter, r *http.Reques
 // @Router /orders/{orderId} [get]
 func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 
 	params := mux.Vars(r)
 	orderId_ := params["orderId"]
@@ -559,13 +582,7 @@ func (mh *MethodHandlers) getOrderHandler(w http.ResponseWriter, r *http.Request
 
 func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
-	if userInfo.SupplierId != 0 {
-		err := fmt.Errorf("This resource is not available for suppliers")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return err
-	}
-
+	userInfo := mh.getUserInfo(r)
 	var ordersFilter OrdersFilter
 	err := schema.NewDecoder().Decode(&ordersFilter, r.URL.Query())
 	if err != nil {
@@ -573,8 +590,6 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
-	ordersFilter.Page = 0
-	ordersFilter.ItemsPerPage = 0
 
 	file, err := os.CreateTemp("/tmp", "*.xlsx")
 	if err != nil {
@@ -583,11 +598,34 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 	}
 	defer os.Remove(file.Name())
 
+	err, code := mh.getOrdersExcel(r.Context(), userInfo, ordersFilter, file.Name())
+	if err != nil {
+		http.Error(w, err.Error(), code)
+		return err
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeFile(w, r, file.Name())
+
+	return nil
+}
+
+func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter, fileName string) (err error, code int) {
+
+	if userInfo.SupplierId != 0 {
+		err := fmt.Errorf("This resource is not available for suppliers")
+		return err, http.StatusUnauthorized
+	}
+
+	ordersFilter.Page = 0
+	ordersFilter.ItemsPerPage = 0
+
 	xls := excelize.NewFile()
 	streamWriter, err := xls.NewStreamWriter("Sheet1")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
+		return err, http.StatusInternalServerError
 	}
 
 	//set column width
@@ -681,20 +719,18 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 
 	streamWriter.SetRow("A2", columnNames)
 
-	orders, err := mh.prodDB.getOrders(r.Context(), userInfo, ordersFilter)
+	orders, err := mh.prodDB.getOrders(ctx, userInfo, ordersFilter)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
+		return err, http.StatusInternalServerError
 	}
 
 	row := 3
 	for _, order := range orders {
 		orderStartRow := row
 
-		orderDetails, err := mh.prodDB.getOrder(r.Context(), userInfo, order.Id)
+		orderDetails, err := mh.prodDB.getOrder(ctx, userInfo, order.Id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return err
+			return err, http.StatusInternalServerError
 		}
 
 		for i := 0; i < len(orderDetails); i++ {
@@ -748,16 +784,14 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 			for col := 'A'; col <= 'Q'; col++ {
 				err = streamWriter.MergeCell(fmt.Sprintf("%c%v", col, orderStartRow), fmt.Sprintf("%c%v", col, row-1))
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return err
+					return err, http.StatusInternalServerError
 				}
 			}
 
 			for _, col := range []string{"AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI"} {
 				err = streamWriter.MergeCell(fmt.Sprintf("%s%v", col, orderStartRow), fmt.Sprintf("%s%v", col, row-1))
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return err
+					return err, http.StatusInternalServerError
 				}
 			}
 		}
@@ -766,22 +800,16 @@ func (mh *MethodHandlers) getOrdersExcelHandler(w http.ResponseWriter, r *http.R
 
 	err = streamWriter.Flush()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
+		return err, http.StatusInternalServerError
 	}
-	xls.SaveAs(file.Name())
+	xls.SaveAs(fileName)
 
-	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote("Заказы.xlsx"))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeFile(w, r, file.Name())
-
-	return nil
+	return nil, http.StatusOK
 }
 
 func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 	cities, err := mh.prodDB.getUserConsigneeCities(r.Context(), userInfo)
 
 	if len(cities) == 0 && userInfo.SupplierId != 0 {
@@ -815,7 +843,7 @@ func (mh *MethodHandlers) getCurrentUserSI(w http.ResponseWriter, r *http.Reques
 
 func (mh *MethodHandlers) getCartContent(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 	cartNumbers, err := mh.prodDB.getCartNumbers(r.Context(), userInfo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -846,51 +874,72 @@ func (mh *MethodHandlers) getCartContent(w http.ResponseWriter, r *http.Request)
 
 }
 
-func (mh *MethodHandlers) getApiCredentials(w http.ResponseWriter, r *http.Request) error {
-
-	userInfo := mh.auth.getUserInfo(r)
-
+func (mh *MethodHandlers) getApiCredentials(ctx context.Context, userInfo UserInfo) (ac *ApiCredentials, err error, code int) {
 	if !userInfo.CompanyAdmin && !userInfo.Admin {
-		err := fmt.Errorf("This resource requires company admin privileges")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return err
+		return nil, fmt.Errorf("This resource requires company admin privileges"), http.StatusUnauthorized
 	}
 
-	apiCreds, err := mh.crutchDB.getApiCredentials(userInfo)
+	apiCreds, err := mh.crutchDB.getApiCredentials(ctx, userInfo)
 
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	err = json.NewEncoder(w).Encode(apiCreds)
-
-	if err != nil {
-		err = fmt.Errorf("Error while preparing json reponse: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-
-	return nil
+	return apiCreds, err, http.StatusOK
 }
 
-func (mh *MethodHandlers) putApiCredentials(w http.ResponseWriter, r *http.Request) error {
+func (mh *MethodHandlers) getApiCredentialsHandler(w http.ResponseWriter, r *http.Request) error {
 
-	userInfo := mh.auth.getUserInfo(r)
+	userInfo := mh.getUserInfo(r)
 
-	if !userInfo.CompanyAdmin && !userInfo.Admin {
-		err := fmt.Errorf("This resource requires company admin privileges")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	apiCreds, err, code := mh.getApiCredentials(r.Context(), userInfo)
+
+	if err == nil {
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		err = json.NewEncoder(w).Encode(apiCreds)
+		if err != nil {
+			err = fmt.Errorf("Error while preparing json reponse: %v", err)
+			code = http.StatusInternalServerError
+		}
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), code)
 		return err
 	}
 
-	params := struct {
-		Enabled  *bool `json:"enabled"`
-		Password *bool `json:"password"`
-	}{}
+	return err
+}
+
+type apiCredParams struct {
+	Enabled  *bool `json:"enabled"`
+	Password *bool `json:"password"`
+}
+
+func (mh *MethodHandlers) putApiCredentials(ctx context.Context, userInfo UserInfo, params apiCredParams) (apiCreds *ApiCredentials, err error, code int) {
+	if !userInfo.CompanyAdmin && !userInfo.Admin {
+		return nil, fmt.Errorf("This resource requires company admin privileges"), http.StatusUnauthorized
+	}
+
+	if params.Enabled != nil {
+		apiCreds, err = mh.crutchDB.setApiCredentialsEnabled(ctx, userInfo, *params.Enabled)
+	}
+
+	if params.Password != nil {
+		apiCreds, err = mh.crutchDB.updateApiCredentialsPassword(ctx, userInfo)
+	}
+
+	if err != nil {
+		return nil, err, http.StatusInternalServerError
+	}
+
+	return apiCreds, nil, http.StatusOK
+}
+
+func (mh *MethodHandlers) putApiCredentialsHandler(w http.ResponseWriter, r *http.Request) error {
+
+	userInfo := mh.getUserInfo(r)
+
+	params := apiCredParams{}
 
 	err := json.NewDecoder(r.Body).Decode(&params)
 	if err != nil {
@@ -899,16 +948,9 @@ func (mh *MethodHandlers) putApiCredentials(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
-	var apiCreds *ApiCredentials
-
-	if params.Enabled != nil {
-		apiCreds, err = mh.crutchDB.setApiCredentialsEnabled(userInfo, *params.Enabled)
-	} else if params.Password != nil {
-		apiCreds, err = mh.crutchDB.updateApiCredentialsPassword(userInfo)
-	}
-
+	apiCreds, err, code := mh.putApiCredentials(r.Context(), userInfo, params)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), code)
 		return err
 	}
 

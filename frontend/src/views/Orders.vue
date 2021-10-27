@@ -154,12 +154,14 @@
 						<td class="col-2 m-0 p-0">{{order.sum_with_nds}}</td>
 						<td class="col-2 m-0 p-0">{{order.status}}</td>
 					</tr>
-					<div class="accordian-body collapse" :id="'order' + index"> 
+					<div class="accordian-body collapse mx-5" :id="'order' + index"> 
 						<th v-if="$windowWidth > 550" class="d-flex text-wrap text-break table-borderless">
-							<td class="col-1"></td>
+							<td class="col-1 text-left">Код</td>
+							<td class="col-1 text-left">Артикул</td>
 							<td class="col-3 text-left">Товар</td>
 							<td class="col-1">Количество</td>
-							<td class="col-2">Цена (без НДС)</td>
+							<td class="col-1">Цена за шт (без НДС)</td>
+							<td class="col-1">Сумма (включая НДС)</td>
 							<td class="col-1">НДС</td>
 							<td class="col-2 text-left">Комментарий</td>
 							<td class="col-1">Склад</td>
@@ -168,15 +170,17 @@
 							<td class="col-1"></td>
 							<td class="col-5 text-left">Товар</td>
 							<td class="col-3">Количество</td>
-							<td class="col-3">Цена (без НДС)</td>
+							<td class="col-3">Сумма</td>
 						</th>
 						<div v-for="(oi, index) in order_details[order.id]" :key="index">
 							<tr v-if="$windowWidth > 550" class="d-flex text-wrap text-break table-borderless small">
-								<td class="col-1"></td>
+								<td class="col-1 text-left">{{oi.product_id}}</td>
+								<td class="col-1 text-left">{{oi.code}}</td>
 								<td class="col-3 text-left">{{oi.name}}</td>
 								<td class="col-1">{{oi.count}}</td>
-								<td class="col-2">{{oi.price}}</td>
-								<td class="col-1">{{oi.nds}}</td>
+								<td class="col-1">{{oi.price}}</td>
+								<td class="col-1">{{oi.sum_with_tax}}</td>
+								<td class="col-1">{{oi.tax}}</td>
 								<td class="col-2">{{oi.comment}}</td>
 								<td class="col-1">{{oi.warehouse}}</td>
 							</tr>
@@ -187,6 +191,20 @@
 								<td class="col-3">{{oi.price}}</td>
 							</tr>
 						</div>
+						<tr class="table-borderless small d-flex">
+							<td class="col-12">
+								<hr/>
+								<div class="d-flex justify-content-center">
+									<button type="button" class="btn btn-primary" @click="exportTTN(order.id)">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-word" viewBox="0 0 16 16">
+											<path d="M4.879 4.515a.5.5 0 0 1 .606.364l1.036 4.144.997-3.655a.5.5 0 0 1 .964 0l.997 3.655 1.036-4.144a.5.5 0 0 1 .97.242l-1.5 6a.5.5 0 0 1-.967.01L8 7.402l-1.018 3.73a.5.5 0 0 1-.967-.01l-1.5-6a.5.5 0 0 1 .364-.606z"></path>
+											<path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"></path>
+										</svg>
+										Скачать
+									</button>
+								</div>
+							</td>
+						</tr>
 					</div> 
 				</div>
 			</tbody>
@@ -217,6 +235,9 @@
 	});
 
 	import VueMultiselect from 'vue-multiselect'
+
+  import { Document, Paragraph, Packer, TextRun } from "docx";
+  import { saveAs } from 'file-saver';
 
 	function doubleRaf (callback) {
 		requestAnimationFrame(() => {
@@ -482,12 +503,44 @@ export default {
 				})
 			}
 		},
-		truncate : function( str, n, useWordBoundary ){
+		truncate : function(str, n, useWordBoundary) {
 			if (str.length <= n) { return str; }
 				const subString = str.substr(0, n-1); 
 				return (useWordBoundary
 					? subString.substr(0, subString.lastIndexOf(" "))
 					: subString) + "...";
+		},
+		exportTTN : function(orderId) {
+			const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun("Hello World"),
+                  new TextRun({
+                    text: "Foo Bar",
+                    bold: true,
+                  }),
+                  new TextRun({
+                    text: "אני אדם כמו כל אדם אחר בעולם חחחחחחחחחח הצחקתי את עצמי ",
+                    bold: true,
+                  }),
+                ],
+              }),
+            ],
+          },
+        ],
+      });
+
+      const mimeType =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const fileName = "ttn-${orderId}.docx";
+      Packer.toBlob(doc).then((blob) => {
+        const docblob = blob.slice(0, blob.size, mimeType);
+        saveAs(docblob, fileName);
+      });
 		}
   },
 }
