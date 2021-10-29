@@ -6,7 +6,7 @@
 
 	<form class="form-horizontal" @submit.prevent>
 		<div class="d-flex flex-wrap m-1 mb-2 justify-content-end">
-			<div class="form-inline font-weight-bold mb-1  mr-5 mr-sm-0">
+			<div class="form-inline font-weight-bold mb-1	mr-5 mr-sm-0">
 				{{totalOrders}} {{declOfNum(totalOrders, ["заказ", "заказа", "заказов"])}}, {{totalSum}} руб
 			</div>
 			<div class="form-inline flex-grow-1 m-1 p-0">
@@ -141,7 +141,7 @@
 							<tr class="d-flex table-borderless m-0 p-0" :id="order.id">
 								<td class="col-3 m-0 p-0">{{formatDate(order.ordered_date)}}</td>
 								<td class="col-3 m-0 p-0">{{formatDate(order.closed_date)}}</td>
-								<td class="col-3 m-0 p-0">{{formatDateOnly(order.shipping_date_est)}}</td>
+								<td class="col-3 m-0 p-0">{{formatDateOnly(order.shipping_date_req)}}</td>
 								<td class="col-3 m-0 p-0">{{formatDate(order.delivered_date)}}</td>
 							</tr>
 						</td>
@@ -195,7 +195,7 @@
 							<td class="col-12">
 								<hr/>
 								<div class="d-flex justify-content-center">
-									<button type="button" class="btn btn-primary" @click="exportTTN(order.id)">
+									<button type="button" class="btn btn-primary" @click="exportTTN(order, order_details[order.id])">
 										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-word" viewBox="0 0 16 16">
 											<path d="M4.879 4.515a.5.5 0 0 1 .606.364l1.036 4.144.997-3.655a.5.5 0 0 1 .964 0l.997 3.655 1.036-4.144a.5.5 0 0 1 .97.242l-1.5 6a.5.5 0 0 1-.967.01L8 7.402l-1.018 3.73a.5.5 0 0 1-.967-.01l-1.5-6a.5.5 0 0 1 .364-.606z"></path>
 											<path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"></path>
@@ -230,14 +230,15 @@
 	import moment from 'moment'
 	moment.updateLocale('en', {
 			week : {
-					dow :0  // 0 to 6 sunday to saturday
+					dow :0	// 0 to 6 sunday to saturday
 			}
 	});
 
 	import VueMultiselect from 'vue-multiselect'
 
-  import { Document, Paragraph, Packer, TextRun } from "docx";
-  import { saveAs } from 'file-saver';
+	// eslint-disable-next-line no-unused-vars
+	import { Document, Paragraph, Packer, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, SectionType, BorderStyle, convertInchesToTwip, HeightRule } from "docx";
+	import { saveAs } from 'file-saver';
 
 	function doubleRaf (callback) {
 		requestAnimationFrame(() => {
@@ -261,11 +262,11 @@ export default {
 			totalSum: 0,
 			order_details:{},
 			filter: {
-        start: new Date(),
-        end: new Date(),
+				start: new Date(),
+				end: new Date(),
 				selectedStatuses: null,
 				text: "",
-      },
+			},
 			selectedStatuses: [],
 			filterNormalized: {},
 			statuses: [
@@ -317,12 +318,12 @@ export default {
 			}
 		}
 
-  },
+	},
 	created() {
 		this.dateColumn = this.dateColumns[1]
-		this.filter.dateColumn =  this.dateColumn.id
-    this.filter.start = new Date(moment().startOf("week"))
-    this.filter.end = new Date(moment().endOf("day"))
+		this.filter.dateColumn =	this.dateColumn.id
+		this.filter.start = new Date(moment().startOf("week"))
+		this.filter.end = new Date(moment().endOf("day"))
 
 		window.onpopstate = this.onPopState
 		
@@ -336,8 +337,13 @@ export default {
 	},
 	beforeUnmount() {
 		window.removeEventListener('scroll', this.onScroll)
-	},  
-  methods: {
+	},	
+	methods: {
+		formatTimeOnly(d) {
+			if(d != null)
+				return moment(d).format('HH:mm:SS')
+			return ""
+		},
 		formatDateOnly(d) {
 			if(d != null)
 				return moment(d).format('YYYY-MM-DD')
@@ -360,18 +366,18 @@ export default {
 			}
 		},
 		onChangeDateColumn() {
-			this.filter.dateColumn =  this.dateColumn.id
+			this.filter.dateColumn =	this.dateColumn.id
 			this.onChange()
 		},
 		onChangeSelectedStatuses() {
 			if (this.selectedStatuses != null) 
-				this.filter.selectedStatuses =  this.selectedStatuses.map(value => value.id)
+				this.filter.selectedStatuses =	this.selectedStatuses.map(value => value.id)
 			else
 				this.filter.selectedStatuses = null
 			this.onChange()
 		},
 		onChange() {
-			history.pushState( JSON.parse(JSON.stringify(this.filter)), this.getFilterText(), "/" + process.env.VUE_APP_BASE_URL + "/orders?" + this.getFilterText())  
+			history.pushState( JSON.parse(JSON.stringify(this.filter)), this.getFilterText(), "/" + process.env.VUE_APP_BASE_URL + "/orders?" + this.getFilterText())	
 			return this.getOrders()
 		},
 		getOrders() {
@@ -391,12 +397,12 @@ export default {
 				method: "GET", 
 				url: "/methods/orders",
 				params: this.filterNormalized,
-			})      
+			})			
 			.then(res => {
 				this.error_message = ""
 				this.orders = this.orders.concat(res.data.orders)
 				this.moreAvailable = res.data.orders.length == this.filterNormalized.itemsPerPage
-				if('count' in  res.data)
+				if('count' in	res.data)
 					this.totalOrders = res.data.count
 				if('sum' in res.data)
 					this.totalSum = res.data.sum_with_tax
@@ -410,7 +416,7 @@ export default {
 			})
 		},
 		loadMoreOrders() {
-      this.loading = true
+			this.loading = true
 			this.filterNormalized.page ++
 
 			this.loadOrders()
@@ -491,7 +497,7 @@ export default {
 				axios({
 					method: "GET", 
 					url: "/methods/orders/"+order_id,
-				})      
+				})			
 				.then(res => {
 					this.error_message = ""
 					this.order_details[order_id] = res.data
@@ -510,38 +516,361 @@ export default {
 					? subString.substr(0, subString.lastIndexOf(" "))
 					: subString) + "...";
 		},
-		exportTTN : function(orderId) {
-			const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun("Hello World"),
-                  new TextRun({
-                    text: "Foo Bar",
-                    bold: true,
-                  }),
-                  new TextRun({
-                    text: "אני אדם כמו כל אדם אחר בעולם חחחחחחחחחח הצחקתי את עצמי ",
-                    bold: true,
-                  }),
-                ],
-              }),
-            ],
-          },
-        ],
-      });
+		// eslint-disable-next-line no-unused-vars
+		exportTTN : function(order, orderLines) {
 
-      const mimeType =
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-      const fileName = "ttn-${orderId}.docx";
-      Packer.toBlob(doc).then((blob) => {
-        const docblob = blob.slice(0, blob.size, mimeType);
-        saveAs(docblob, fileName);
-      });
+			var content_intro = [
+							new Paragraph({
+								text: "Приложение ТТН от " + (order.shipped_date ? this.formatDateOnly(order.shipped_date) : "_".repeat(12)),
+								heading: HeadingLevel.HEADING_1,
+								pageBreakBefore: true,
+							}),
+							new Paragraph({
+								text: "Приложение к ТТН является обязательным документом для оформления приема-передачи груза",
+							}),
+							new Paragraph({
+								text: "",
+							}),
+						]
+
+	
+			var introLines = [
+					{name:"Номер заказа: ", value: order.contractor_number},
+					{name : "Грузоотправитель (Поставщик)", value : order.seller_name + ", " + order.seller_inn + ", " + order.seller_kpp + ", " + order.seller_address},
+					{name : "Грузополучатель (Покупатель): ", value : order.customer_name + ", " + order.customer_inn + ", " + order.customer_kpp + ", " + order.customer_address},
+			]
+
+			var introRows = []
+
+			introLines.forEach(line => {
+					introRows.push(
+						new TableRow({
+							children: [
+								new TableCell({
+									children: [new Paragraph({children: [
+												new TextRun({text:line.name, bold: true})
+											]
+										})
+									],
+									width: { size: 20, type: WidthType.PERCENTAGE, },
+									borders: {
+										top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+									},
+								}),
+								new TableCell({
+									children: [new Paragraph({children: [
+											new TextRun(line.value.length > 0 ? line.value : "_".repeat(28) ),
+										]}
+									)],
+									borders: {
+										top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+									},
+								}),
+							]
+						})
+					)
+				}
+			)
+
+			var introTable = new Table({
+				rows : introRows,
+				borders: {
+					top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+				},
+				width: {
+						size: 100,
+						type: WidthType.PERCENTAGE,
+				},
+			})
+
+			// eslint-disable-next-line no-unused-vars
+			var orderLineRows = [
+				new TableRow({
+					children: [
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text:"#", bold: true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Код", bold:true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Артикул", bold:true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Наименование", bold:true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Кол-во", bold:true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Цена, руб. коп. за единицу", bold:true})]})],
+						}),
+						new TableCell({
+							children: [new Paragraph({children: [new TextRun({text: "Цена, руб. коп. всего (в том числе НДС)", bold:true})]})],
+						}),
+					]
+				})
+			]
+
+
+			// eslint-disable-next-line no-unused-vars
+			var id = 1
+			// eslint-disable-next-line no-unused-vars
+			orderLines.forEach(oi => { 
+				orderLineRows.push(
+					new TableRow({
+						children: [
+							new TableCell({
+								children: [new Paragraph((id++).toString())],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.product_id.toString())],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.code)],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.name)],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.count.toString())],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.price.toString())],
+							}),
+							new TableCell({
+								children: [new Paragraph(oi.sum_with_tax.toString())],
+							}),
+						]
+					})
+				)
+			})
+					
+			var orderLinesTable = new Table({
+			rows : orderLineRows,
+				width: {
+						size: 100,
+						type: WidthType.PERCENTAGE,
+				},
+			})
+
+			var outroLines = [
+					{
+						col1 : {name : "Адрес поставщика", value : [order.seller_address]},
+						col2 : {name : "Адрес покупателя", value : [order.customer_address]},
+					},
+					{
+						col1 : {name: "Адрес отгрузки: ", value : [(orderLines[0].warehouse + (orderLines[0].warehouse_adress? ", " + orderLines[0].warehouse_address : ""))]},
+						col2 : {name: "Адрес приёма груза: ", value : [order.consignee_city + ", " + order.consignee_address]},
+					},
+					{
+						col1 : {name : "Дата отгрузки", value : [order.shipped_date? this.formatDateOnly(order.shipped_date) : null]},
+						col2 : {name : "Дата приёмки груза", value : [order.accepted_date?this.formatDateOnly(order.accepted_date) : null]},
+					},
+					{
+						col1 : {name : "Время отгрузки", value : [order.shipped_date? this.formatTimeOnly(order.shipped_date) : null]},
+						col2 : {name : "Время приёмки груза", value : [order.accepted_date?this.formatTimeOnly(order.accepted_date) : null]},
+					},
+					{
+						col1 : {name : "Поставщик: груз передал", value: [null, ' '.repeat(35) + 'ФИО', null, ' '.repeat(33) + 'подпись']},
+						col2 : {name : "Клиент:	груз принял:", value: [null, ' '.repeat(35) + 'ФИО', null, ' '.repeat(33) + 'подпись']},
+					},
+					{
+						col1 : {name : "Перевозчик: груз принял", value: [null, ' '.repeat(35) + 'ФИО', null, ' '.repeat(33) + 'подпись']},
+						col2 : {name : "", value: ["", "", "", ""]},
+					},
+			]
+
+			var outroRows = []
+
+			outroLines.forEach(line => {
+				var rowspan = line.col1.value.length;
+				for(let i=0; i< rowspan; i++) {
+					if (i==0) {
+						outroRows.push(
+							new TableRow({
+		
+								children: [
+									new TableCell({
+										children: [new Paragraph({
+												children: [
+													new TextRun({text:line.col1.name, bold: true, size: 18})
+												],
+											})
+										],
+										width: { size: 20, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											right: convertInchesToTwip(0.05),
+										},
+										rowSpan: rowspan,
+									}),
+									new TableCell({
+										children: [new Paragraph({children: [
+												new TextRun({text: line.col1.value[i] ? line.col1.value[i] : "_".repeat(28), size: 18} ),
+											]}
+										)],
+										width: { size: 30, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											left: convertInchesToTwip(0.05),
+											right: convertInchesToTwip(0.1),
+										},
+									}),
+									new TableCell({
+										children: [new Paragraph({children: [
+													new TextRun({text:line.col2.name, bold: true, size: 18})
+												]
+											})
+										],
+										width: { size: 20, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											left: convertInchesToTwip(0.1),
+											right: convertInchesToTwip(0.05),
+										},
+										rowSpan: rowspan,
+									}),
+									new TableCell({
+										children: [new Paragraph({children: [
+												new TextRun({ text: line.col2.value[i] || !line.col2.name ? line.col2.value[i] : "_".repeat(28), size: 18 }),
+											]}
+										)],
+										width: { size: 30, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											left: convertInchesToTwip(0.05),
+										},
+									}),
+								],
+							})
+							)
+						}
+						else {
+						outroRows.push(
+							new TableRow({
+		
+								children: [
+									new TableCell({
+										children: [new Paragraph({children: [
+												new TextRun({text: line.col1.value[i] ? line.col1.value[i] : "_".repeat(28), size: line.col1.value[i] ? 12 : 18} ),
+											]}
+										)],
+										width: { size: 30, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											left: convertInchesToTwip(0.05),
+											right: convertInchesToTwip(0.1),
+										},
+									}),
+									new TableCell({
+										children: [new Paragraph({children: [
+												new TextRun({ text: line.col2.value[i] || !line.col2.name ? line.col2.value[i] : "_".repeat(28), size : line.col2.value[i] ? 12 : 18}),
+											]}
+										)],
+										width: { size: 30, type: WidthType.PERCENTAGE, },
+										borders: {
+											top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+											right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+										},
+										margins: {
+											bottom: convertInchesToTwip(0.05),
+											left: convertInchesToTwip(0.05),
+										},
+									}),
+								],
+							})
+							)
+						}
+					}
+				}
+			)
+
+			var outroTable = new Table({
+				rows : outroRows,
+				borders: {
+					top: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					bottom: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					left: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+					right: { style: BorderStyle.NIL, size: 0, color: "FFFFFF", },
+				},
+				width: {
+						size: 100,
+						type: WidthType.PERCENTAGE,
+				},
+			})
+
+
+			const doc = new Document({
+				sections: [
+					{
+						properties: {},
+						children: content_intro,
+					},
+					{
+						properties: {type: SectionType.CONTINUOUS},
+						children: [introTable]
+					},
+					{
+						properties: {type: SectionType.CONTINUOUS},
+						children: [orderLinesTable]
+					},
+					{
+						properties: {type: SectionType.CONTINUOUS},
+						children: [outroTable]
+					},
+				],
+			});
+
+			const mimeType =
+				"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+			const fileName = "ttn-" + order.id + ".docx";
+			Packer.toBlob(doc).then((blob) => {
+				const docblob = blob.slice(0, blob.size, mimeType);
+				saveAs(docblob, fileName);
+			});
 		}
-  },
+	},
 }
 </script>

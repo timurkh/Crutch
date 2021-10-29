@@ -23,7 +23,11 @@
 				<div class="collapse navbar-collapse navbar-ex1-collapse pull-left" >
 					<ul class="hidden-xs hidden-sm nav navbar-nav">
 						<li class="" title="Каталог">
-							<a href="/catalog/" class="nav-link">
+							<a v-if="user.supplier_id>0" href="/catalog_supplier/" class="nav-link">
+								<span class="hidden-ntb nav-img-wrapper"><img src="/static/icons/Loading%20Trolley.svg" class="nav-link-img" alt="Иконка телеги"></span>
+								<span class="hidden-ntb nav-link-text">Каталог</span>
+							</a>
+							<a v-else href="/catalog/" class="nav-link">
 								<span class="hidden-ntb nav-img-wrapper"><img src="/static/icons/Loading%20Trolley.svg" class="nav-link-img" alt="Иконка телеги"></span>
 								<span class="hidden-ntb nav-link-text">Каталог</span>
 							</a>

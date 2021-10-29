@@ -741,25 +741,27 @@ type OrderDetails struct {
 	Status             string     `json:"status"`
 	OrderedDate        *time.Time `json:"ordered_date"`
 	ClosedDate         *time.Time `json:"closed_date"`
-	ShippingDateEst    *time.Time `json:"shipping_date_est"`
+	ShippingDateEst    *time.Time `json:"shipping_date_req"`
 	SellerId           int        `json:"seller_id"`
 	SellerName         string     `json:"seller_name"`
-	sellerInn          string
-	sellerKpp          string
-	sellerAddress      string
-	BuyerId            int    `json:"buyer_id"`
-	Buyer              string `json:"buyer"`
-	CustomerId         int    `json:"customer_id"`
-	CustomerName       string `json:"customer_name"`
-	customerInn        string
-	customerKpp        string
-	customerAddress    string
+	SellerInn          string     `json:"seller_inn"`
+	SellerKpp          string     `json:"seller_kpp"`
+	SellerAddress      string     `json:"seller_address"`
+	BuyerId            int        `json:"buyer_id"`
+	Buyer              string     `json:"buyer"`
+	CustomerId         int        `json:"customer_id"`
+	CustomerName       string     `json:"customer_name"`
+	CustomerInn        string     `json:"customer_inn"`
+	CustomerKpp        string     `json:"customer_kpp"`
+	CustomerAddress    string     `json:"customer_address"`
 	ConsigneeName      string     `json:"consignee_name"`
 	OnOrderCoupon      float64    `json:"on_order_coupon"`
 	OnOrderCouponFixed float64    `json:"on_order_coupon_fixed"`
 	ShippedDate        *time.Time `json:"shipped_date"`
 	DeliveredDate      *time.Time `json:"delivered_date"`
 	AcceptedDate       *time.Time `json:"accepted_date"`
+	ConsigneeCity      string     `json:"consignee_city"`
+	ConsigneeAddress   string     `json:"consignee_address"`
 }
 
 func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, ordersFilter OrdersFilter) (orders []OrderDetails, err error) {
@@ -790,7 +792,9 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			ds.date_shipped,
 			dd.date_delivered,
 			da.date_accepted,
-			ov.order_sum_with_tax
+			ov.order_sum_with_tax,
+			cc_city.city,
+			cc.address as consignee_name
 		FROM order_order oo 
 			JOIN (
 				SELECT oo.id, 
@@ -820,6 +824,7 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			JOIN company_company seller ON (seller.object_id=oo.supplier_id AND seller.content_type_id=186)
 			JOIN core_user cu ON (cu.id = oo.user_id)
 			LEFT JOIN consignee_consignee cc ON (cc.id = oo.consignee_id)
+			LEFT JOIN company_city cc_city ON (cc_city.id = cc.city_id)
 			JOIN company_company customer ON (customer.object_id=oo.contractor_id AND customer.content_type_id=79)
 		WHERE oo.status_id NOT IN (17) AND oo.deleted = FALSE AND seller.object_id!=1`
 
@@ -921,6 +926,8 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			toTime(values[22]),
 			toTime(values[23]),
 			toTime(values[24]),
+			toString(values[26]),
+			toString(values[27]),
 		}
 		orders = append(orders, entry)
 	}
@@ -931,20 +938,21 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 type OrderLines []OrderLine
 
 type OrderLine struct {
-	ProductId     int     `json:"product_id"`
-	Name          string  `json:"name"`
-	Code          string  `json:"code"`
-	Warehouse     string  `json:"warehouse"`
-	Count         float64 `json:"count"`
-	Price         float64 `json:"price"`
-	Nds           float64 `json:"nds"`
-	CouponPercent float64 `json:"coupon_percent"`
-	CouponFixed   float64 `json:"coupon_fixed"`
-	CouponValue   float64 `json:"coupon_value"`
-	Comment       string  `json:"comment"`
-	Sum           float64 `json:"sum"`
-	Tax           float64 `json:"tax"`
-	SumWithTax    float64 `json:"sum_with_tax"`
+	ProductId        int     `json:"product_id"`
+	Name             string  `json:"name"`
+	Code             string  `json:"code"`
+	Warehouse        string  `json:"warehouse"`
+	WarehouseAddress string  `json:"warehouse_address"`
+	Count            float64 `json:"count"`
+	Price            float64 `json:"price"`
+	Nds              float64 `json:"nds"`
+	CouponPercent    float64 `json:"coupon_percent"`
+	CouponFixed      float64 `json:"coupon_fixed"`
+	CouponValue      float64 `json:"coupon_value"`
+	Comment          string  `json:"comment"`
+	Sum              float64 `json:"sum"`
+	Tax              float64 `json:"tax"`
+	SumWithTax       float64 `json:"sum_with_tax"`
 }
 
 func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId int) (OrderLines, error) {
@@ -964,7 +972,8 @@ func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId
 			oi.coupon_fixed, 
 			oi.coupon_value, 
 			oi.comment,
-			round((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2) AS sum
+			round((oi.count * ((((oi.item_price - oi.coupon_fixed) * ((100)::numeric - oi.coupon_percent)) / (100)::numeric))::double precision)::numeric, 2) AS sum,
+			sw.address AS warehouse_address
 		FROM order_orderitem oi
 			JOIN order_order oo ON (oi.order_id = oo.id)
 			JOIN product_modification pm ON (oi.modification_id = pm.id)
@@ -1024,6 +1033,7 @@ func (db *ProdDBHelper) getOrder(ctx context.Context, userInfo UserInfo, orderId
 			name,
 			code,
 			warehouse,
+			toString(values[12]),
 			count,
 			price,
 			nds,

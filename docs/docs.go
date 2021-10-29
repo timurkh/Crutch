@@ -147,14 +147,29 @@ var doc = `{
                 "closed_date": {
                     "type": "string"
                 },
+                "consignee_address": {
+                    "type": "string"
+                },
+                "consignee_city": {
+                    "type": "string"
+                },
                 "consignee_name": {
                     "type": "string"
                 },
                 "contractor_number": {
                     "type": "string"
                 },
+                "customer_address": {
+                    "type": "string"
+                },
                 "customer_id": {
                     "type": "integer"
+                },
+                "customer_inn": {
+                    "type": "string"
+                },
+                "customer_kpp": {
+                    "type": "string"
                 },
                 "customer_name": {
                     "type": "string"
@@ -174,8 +189,17 @@ var doc = `{
                 "ordered_date": {
                     "type": "string"
                 },
+                "seller_address": {
+                    "type": "string"
+                },
                 "seller_id": {
                     "type": "integer"
+                },
+                "seller_inn": {
+                    "type": "string"
+                },
+                "seller_kpp": {
+                    "type": "string"
                 },
                 "seller_name": {
                     "type": "string"
@@ -183,7 +207,7 @@ var doc = `{
                 "shipped_date": {
                     "type": "string"
                 },
-                "shipping_date_est": {
+                "shipping_date_req": {
                     "type": "string"
                 },
                 "status": {
@@ -240,6 +264,9 @@ var doc = `{
                     "type": "number"
                 },
                 "warehouse": {
+                    "type": "string"
+                },
+                "warehouse_address": {
                     "type": "string"
                 }
             }
