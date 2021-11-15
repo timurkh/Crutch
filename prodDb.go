@@ -294,6 +294,7 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 	query += `JOIN product_category pc ON ( pp.category_id = pc.id )
 		LEFT JOIN product_suppliercategory psc ON (pp.supplier_category_id = psc.id)
 		LEFT JOIN company_company cc ON (cc.object_id=supplier_id AND content_type_id=186)
+		LEFT JOIN supplier_supplier ss ON (ss.id=supplier_id)
 		LEFT JOIN (
 			SELECT DISTINCT ON (pm.product_id) pi.image, pm.product_id
 			FROM product_image pi
@@ -316,9 +317,12 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 	if userInfo.SupplierId != 0 {
 		args = append(args, userInfo.SupplierId)
 		query += " AND supplier_id=$" + strconv.Itoa(len(args))
-	} else if supplier != "" {
-		args = append(args, "%"+supplier+"%")
-		query += " AND cc.name ILIKE $" + strconv.Itoa(len(args))
+	} else {
+		if supplier != "" {
+			args = append(args, "%"+supplier+"%")
+			query += " AND cc.name ILIKE $" + strconv.Itoa(len(args))
+		}
+		query += " AND ss.make_orders_blocked=FALSE AND ss.work_blocked=FALSE"
 	}
 
 	query += " ORDER BY ordering"
