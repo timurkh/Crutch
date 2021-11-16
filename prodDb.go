@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgtype"
@@ -366,7 +367,7 @@ func (db *ProdDBHelper) getProductEntries(ctx context.Context, product_ids []int
 			toFloat(values[5]),
 			price,
 			supplier,
-			toString(values[8]),
+			strings.Replace(strings.Replace(toString(values[8]), "=", "%3D", -1), "?", "%3F", -1),
 			toInt(values[9]),
 			toInt(values[10]),
 			products_score[id],
