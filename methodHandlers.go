@@ -630,7 +630,7 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 
 	//set column width
 	columnNames := []interface{}{
-		excelize.Cell{Value: "ID"},
+		excelize.Cell{Value: "ID  "},
 		excelize.Cell{Value: "Номер заказа"},
 		excelize.Cell{Value: "Дата заказа"},
 		excelize.Cell{Value: "Дата согласования"},
@@ -665,6 +665,8 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 		excelize.Cell{Value: "Дата приёмки"},
 		excelize.Cell{Value: "Время приёмки"},
 		excelize.Cell{Value: "Статус"},
+		excelize.Cell{Value: "Имя              "},
+		excelize.Cell{Value: "Электронная почта"},
 	}
 	for i, columnName := range columnNames {
 		cellWidth := utf8.RuneCountInString(columnName.(excelize.Cell).Value.(string)) + 2 // + 2 for margin
@@ -706,6 +708,9 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 		excelize.Cell{},
 		excelize.Cell{Value: "Статус заказа \"Принят\""},
 		excelize.Cell{},
+		excelize.Cell{},
+		excelize.Cell{Value: "Закупщик"},
+		excelize.Cell{},
 	})
 
 	streamWriter.MergeCell("B1", "C1")
@@ -716,6 +721,7 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 	streamWriter.MergeCell("AC1", "AD1")
 	streamWriter.MergeCell("AE1", "AF1")
 	streamWriter.MergeCell("AG1", "AH1")
+	streamWriter.MergeCell("AJ1", "AK1")
 
 	streamWriter.SetRow("A2", columnNames)
 
@@ -774,6 +780,8 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 				excelize.Cell{Value: toDateString(order.AcceptedDate)},
 				excelize.Cell{Value: toTimeString(order.AcceptedDate)},
 				excelize.Cell{Value: order.Status},
+				excelize.Cell{Value: order.Buyer},
+				excelize.Cell{Value: order.BuyerEmail},
 			})
 
 			row++
@@ -788,7 +796,7 @@ func (mh *MethodHandlers) getOrdersExcel(ctx context.Context, userInfo UserInfo,
 				}
 			}
 
-			for _, col := range []string{"AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI"} {
+			for _, col := range []string{"AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK"} {
 				err = streamWriter.MergeCell(fmt.Sprintf("%s%v", col, orderStartRow), fmt.Sprintf("%s%v", col, row-1))
 				if err != nil {
 					return err, http.StatusInternalServerError

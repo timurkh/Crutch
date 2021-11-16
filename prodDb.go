@@ -753,6 +753,7 @@ type OrderDetails struct {
 	SellerAddress      string     `json:"seller_address"`
 	BuyerId            int        `json:"buyer_id"`
 	Buyer              string     `json:"buyer"`
+	BuyerEmail         string     `json:"buyer_email"`
 	CustomerId         int        `json:"customer_id"`
 	CustomerName       string     `json:"customer_name"`
 	CustomerInn        string     `json:"customer_inn"`
@@ -784,6 +785,7 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			seller.jur_address AS seller_address,
 			cu.id AS buyer_id,
 			cu.last_name || ' ' || cu.first_name || ' ' || cu.middle_name AS buyer,
+			cu.email AS buyer_email,
 			customer.object_id AS customer_id,
 			customer.name AS customer_name,
 			customer.inn AS customer_inn,
@@ -865,8 +867,8 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			s := values[1].(pgtype.Numeric)
 			s.AssignTo(&sum)
 		}
-		if values[25] != nil {
-			s := values[25].(pgtype.Numeric)
+		if values[26] != nil {
+			s := values[26].(pgtype.Numeric)
 			s.AssignTo(&sum_with_tax)
 		}
 
@@ -878,25 +880,25 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 		seller_address := toString(values[10])
 		buyer_id := int(values[11].(int32))
 		buyer := toString(values[12])
-		customer_id := int(values[13].(int32))
-		customer_name := toString(values[14])
-		customer_inn := toString(values[15])
-		customer_kpp := toString(values[16])
-		customer_address := toString(values[17])
-		consignee_name := toString(values[18])
+		customer_id := int(values[14].(int32))
+		customer_name := toString(values[15])
+		customer_inn := toString(values[16])
+		customer_kpp := toString(values[17])
+		customer_address := toString(values[18])
+		consignee_name := toString(values[19])
 
 		var on_order_coupon, on_order_coupon_fixed float64
-		if values[19] != nil {
-			s := values[19].(pgtype.Numeric)
+		if values[20] != nil {
+			s := values[20].(pgtype.Numeric)
 			s.AssignTo(&on_order_coupon)
 		}
 
-		if values[20] != nil {
-			s := values[20].(pgtype.Numeric)
+		if values[21] != nil {
+			s := values[21].(pgtype.Numeric)
 			s.AssignTo(&on_order_coupon_fixed)
 		}
 
-		contractor_number := toString(values[21])
+		contractor_number := toString(values[22])
 		if contractor_number != "" && len(contractor_number) < 10 {
 			s := "00000000000"
 			s = s + contractor_number
@@ -919,6 +921,7 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			seller_address,
 			buyer_id,
 			buyer,
+			toString(values[13]),
 			customer_id,
 			customer_name,
 			customer_inn,
@@ -927,11 +930,11 @@ func (db *ProdDBHelper) getOrders(ctx context.Context, userInfo UserInfo, orders
 			consignee_name,
 			on_order_coupon,
 			on_order_coupon_fixed,
-			toTime(values[22]),
 			toTime(values[23]),
 			toTime(values[24]),
-			toString(values[26]),
+			toTime(values[25]),
 			toString(values[27]),
+			toString(values[28]),
 		}
 		orders = append(orders, entry)
 	}
