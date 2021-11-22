@@ -530,12 +530,17 @@ func (mh *MethodHandlers) getOrders(ctx context.Context, userInfo UserInfo, orde
 
 	orders := Orders{Orders: ordersList}
 
+	resultLog := fmt.Sprintf("Returning array of %v orders", len(ordersList))
+
 	if ordersFilter.Page == 0 {
 		orders.Count, orders.Sum, orders.SumWithTax, err = mh.prodDB.getOrdersSum(ctx, userInfo, ordersFilter)
 		if err != nil {
 			return nil, err, http.StatusInternalServerError
 		}
+		resultLog += fmt.Sprintf(", count=%v, sum=%v, sumWithTax=%v", orders.Count, orders.Sum, orders.SumWithTax)
 	}
+	log.Info(resultLog)
+
 	return &orders, nil, http.StatusOK
 
 }
