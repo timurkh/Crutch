@@ -402,9 +402,9 @@ export default {
 				this.error_message = ""
 				this.orders = this.orders.concat(res.data.orders)
 				this.moreAvailable = res.data.orders.length == this.filterNormalized.itemsPerPage
-				if('count' in	res.data)
+				if('count' in	res.data && res.data.count > 0)
 					this.totalOrders = res.data.count
-				if('sum' in res.data)
+				if('sum' in res.data && res.data.sum_with_tax > 0)
 					this.totalSum = res.data.sum_with_tax
 				this.loading = false
 				this.$nextTick(doubleRaf(() => this.onScroll()))
