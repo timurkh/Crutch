@@ -32,7 +32,7 @@
 								<span class="hidden-ntb nav-link-text">Каталог</span>
 							</a>
 						</li>
-						<li class="" title="Поставщики">
+						<li v-if="user.supplier_id==0" class="" title="Поставщики">
 							<a href="/suppliers/" class="nav-link">
 								<span class="nav-img-wrapper"><img src="/static/icons/Truck.svg" class="nav-link-img" alt="Иконка грузовой машины"></span>
 								<span class="hidden-ntb nav-link-text">Поставщики</span>
